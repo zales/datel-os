@@ -103,7 +103,7 @@ KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINT
 
 3. Restartuj (ze stocku vypni a zapni, z Datel OS stačí `reboot`). Nový systém naběhne ve zkušebním režimu: první věc po startu přepne ukazatel v p1 na druhý slot, takže zaseknutí nebo vypnutí a zapnutí vrátí předchozí systém. Až budeš spokojený, na tiskárně `k1os-slot keep`; `k1os-slot status` ukáže, odkud běží a kam půjde příští start. Když už `keep` platí z dřívějška, nový slot ho převezme (soubor `boot-keep` je v `/usr/data`, společném oběma slotům).
 
-4. Při prvním startu po přechodu ze stocku do Datel OS teplým restartem zůstane hlavní MCU ve stavu shutdown a Klipper ohlásí chybu konfigurace; jeden `FIRMWARE_RESTART` to srovná. Mezi dvěma slot Datel OS se to neděje.
+4. Při prvním startu po přechodu ze stocku do Datel OS teplým restartem zůstane hlavní MCU ve stavu shutdown a Klipper ohlásí chybu konfigurace; jeden `FIRMWARE_RESTART` to srovná. Mezi dvěma sloty Datel OS se to neděje.
 
 Varianta `kalico` při prvním studeném startu nahraje vlastní firmware do všech tří MCU (asi 10 s); při návratu si stock firmware MCU přeflashuje zpět sám. Podrobnosti o kalibraci sondy a input shaperu jsou v README.
 
