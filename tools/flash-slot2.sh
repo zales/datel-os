@@ -6,7 +6,8 @@
 #   tools/flash-slot2.sh --write    write and verify slot 2, marker untouched
 #   tools/flash-slot2.sh --switch   point the marker at slot 2 (next boot)
 #
-# Images come from out/; OUT=out/kalico flashes another variant.
+# Images come from out/; OUT=out/kalico flashes another variant. KERNEL= and
+# ROOTFS= name the two files directly, e.g. the ones from a GitHub Release.
 #
 # Datel OS boots as a trial: its first step points the marker back at slot 1,
 # so a power cycle returns to stock until you run "k1os-slot keep" on it.
@@ -21,8 +22,8 @@ PUBKEY="${PUBKEY:-$KEY.pub}"
 SSH=(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$PRINTER")
 OUT="${OUT:-$HERE/out}"
-KERNEL="$OUT/xImage-k1os"
-ROOTFS="$OUT/k1-image-rootfs.squashfs"
+KERNEL="${KERNEL:-$OUT/xImage-k1os}"
+ROOTFS="${ROOTFS:-$OUT/k1-image-rootfs.squashfs}"
 MODE="${1:-check}"
 
 die() { echo "STOP: $*" >&2; exit 1; }

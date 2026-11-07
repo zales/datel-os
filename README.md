@@ -29,7 +29,7 @@ Cíl je vlastní systém postavený celý ze zdrojových kódů: jádro, systém
 
 ## Build
 
-Nejjednodušeji `./build.sh`, výsledek je v Docker volume a v logu `build-last.log` tamtéž.
+Nejjednodušeji `./build.sh`, výsledek je v Docker volume a v logu `build-last.log` tamtéž. Vydání (tag `vX.Y.Z` → GitHub Release s obrazy) popisuje [docs/RELEASE.md](docs/RELEASE.md).
 
 Potřebuje Docker. Build musí běžet na souborovém systému, který rozlišuje velikost písmen, proto pracovní adresář žije v Docker volume.
 
