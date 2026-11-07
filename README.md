@@ -129,7 +129,7 @@ Licence: Kalico i firmware jsou GPL-3.0. Repozitář pellcorp/creality (instalá
 Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji načte bez chyby a zastaví se až na otevření sériového portu MCU. Aktualizaci MCU dělá balík `k1os-mcu-update` v obou variantách: varianta s Creality Klipperem nese obrazy MCU z repozitáře Creality (`004/003/004`), varianta s Kalicem vlastní (`021/026/121`), takže každá si při startu nahraje firmware, se kterým umí pracovat.
 
 **Nasazení varianty s Kalicem**
-1. Ze stocku: `PRINTER=root@<ip> tools/flash-slot2.sh --write` s obrazy z `out/kalico/` (skript čte `out/`, takže je nejdřív zkopíruj nebo uprav cestu), `--switch`, restart.
+1. Ze stocku: `OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write`, `--switch`, restart.
 2. Při prvním startu `k1os-kalico-config` převede konfiguraci (záloha vedle v `config.creality-<datum>`), `k1os-mcu-update` nahraje nový firmware do tří MCU (asi 10 s, všechny najednou; jen po zapnutí ze studena, po pouhém restartu systému zůstává starý firmware a Kalico se k MCU nepřipojí), pak naběhne Kalico.
 3. V Mainsailu: `LOAD_CELL_DIAGNOSTIC`, potom `LOAD_CELL_CALIBRATE` se závažím asi 6 kg (`TARE`, `CALIBRATE GRAMS=6000`, `ACCEPT`, `SAVE_CONFIG`).
 4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
