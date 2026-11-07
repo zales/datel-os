@@ -14,7 +14,10 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PRINTER="${PRINTER:-root@192.168.1.104}"
 KEY="${KEY:-$HOME/.ssh/k1_printer_ecdsa}"
 PUBKEY="${PUBKEY:-$KEY.pub}"
-SSH=(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 "$PRINTER")
+# Stock and K1 OS have different host keys and may swap IP leases, so the
+# host-key cache is not used; the printer is authenticated by our own key.
+SSH=(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$PRINTER")
 KERNEL="$HERE/out/xImage-k1os"
 ROOTFS="$HERE/out/k1-image-rootfs.squashfs"
 MODE="${1:-check}"
