@@ -102,7 +102,7 @@ def main():
         (r"printer\.custom_macro\.", "printer['gcode_macro _K1OS_PARAMS']."),
         (r"printer\.print_stats\.z_pos\|float", "printer.toolhead.position.z|float"),
         (r"printer\.print_stats\.power_loss == 1", "False"),
-        (r"^(\s*)BED_MESH_PROFILE LOAD=default_new\s*$", r"\1_K1OS_BED_MESH"),
+        (r"^(\s*)BED_MESH_PROFILE LOAD=default_new\s*$", r"\1_KALICO_BED_MESH"),
         (r"^(\s*)BED_MESH_PROFILE LOAD=\"?default\"?\s*$", r"\1"),
     ]
     sub_file(os.path.join(CFG, "gcode_macro.cfg"), [(a, b) for a, b in macro_pairs])
