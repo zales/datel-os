@@ -46,6 +46,17 @@ server {
         proxy_set_header X-Scheme $scheme;
     }
 
+    # Slicers set to the "Creality" host type post the file to /upload/<name>
+    # (the stock web server's API) as a multipart "file" field, which is what
+    # Moonraker's upload takes too; the name comes from the part itself.
+    location /upload/ {
+        rewrite ^/upload/.*$ /server/files/upload break;
+        proxy_pass http://apiserver;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
     # Camera: uStreamer on 127.0.0.1:8080 (ustreamer.service)
     location /webcam/ {
         postpone_output 0;
