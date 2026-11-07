@@ -9,7 +9,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=1ebbd3e34237af26da5dc08a4e440464"
 SRC_URI = "git://github.com/CrealityOfficial/K1_Series_Klipper.git;protocol=https;branch=main \
            file://klipper.service \
            file://klipper-mcu.service \
-          "
+           file://0001-linux-i2c-poll-on-nack.patch"
 SRCREV = "e09f36e6ada60e5467b0bef731a96263b5d8095b"
 PV = "k1-1.3.3.46+git${SRCPV}"
 S = "${WORKDIR}/git"
