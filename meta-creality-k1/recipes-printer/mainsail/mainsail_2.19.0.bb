@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/GPL-3.0-only;md5=c79ff39f19dfec
 SRC_URI = "https://github.com/mainsail-crew/mainsail/releases/download/v${PV}/mainsail.zip;subdir=mainsail-dist \
            file://mainsail.nginx \
           "
-SRC_URI[sha256sum] = "f4463bdc591ee1ea59c010e3e8f23742294e8351b13807b68f7de318cea7efdb"
+SRC_URI[sha256sum] = "c4d9d96f89851c6ae0709c2f20725447f3fe8c57cf193869b0083441bd93378a"
 
 S = "${WORKDIR}/mainsail-dist"
 
