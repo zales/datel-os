@@ -1,0 +1,30 @@
+#!/bin/sh
+# Give wlan0 the printer's own MAC address, found the same way as on stock:
+# the sn_mac partition first ("<sn>;<mac>;..."), then /usr/data/macaddr.txt.
+# The router then sees the same device as under the stock firmware.
+
+mac=
+dev=/dev/disk/by-partlabel/sn_mac
+[ -e "$dev" ] || dev=/dev/mmcblk0p2
+if [ -e "$dev" ]; then
+    rec=$(dd if="$dev" bs=512 count=1 2>/dev/null | tr -d '\000')
+    rec=${rec#*;}
+    mac=${rec%%;*}
+fi
+echo "$mac" | grep -qE '^[0-9A-Fa-f]{12}$' || mac=
+
+if [ -z "$mac" ] && [ -f /usr/data/macaddr.txt ]; then
+    mac=$(tr -cd '0-9A-Fa-f' < /usr/data/macaddr.txt)
+    [ ${#mac} -eq 12 ] || mac=
+fi
+
+if [ -z "$mac" ]; then
+    echo "k1os-wifi-mac: no stored MAC address, keeping the chip's own" >&2
+    exit 0
+fi
+
+mac=$(echo "$mac" | tr 'A-F' 'a-f' | sed 's/../&:/g; s/:$//')
+[ "$(cat /sys/class/net/wlan0/address 2>/dev/null)" = "$mac" ] && exit 0
+ip link set dev wlan0 down
+ip link set dev wlan0 address "$mac"
+echo "k1os-wifi-mac: wlan0 address set to $mac"

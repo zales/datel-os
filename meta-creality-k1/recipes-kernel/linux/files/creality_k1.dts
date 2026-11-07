@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Creality K1 mainboard (CR4CU220812S11/S12), Ingenic X2000.
+ *
+ * DRAFT, NOT BOOT-TESTED. Built on top of NebulaOS's board file for the
+ * Ender-3 V3 KE (same SoC, same eMMC/Wi-Fi power/backlight design), with the
+ * K1 differences taken from the K1's own stock firmware 1.3.3.46:
+ *   - live device tree:   hardware/k1-stock.dts (from /sys/firmware/fdt)
+ *   - module parameters:  hardware/stock-module-params/*.sh
+ *   - kernel cmdline:     console=ttyS2 lcm_id=<n> init=/linuxrc root=/dev/mmcblk0p7|8
+ * Every K1-specific value below names the stock file it comes from.
+ */
+#include "halley5_v30.dts"
+
+/ {
+	model = "Creality K1";
+	compatible = "creality,k1", "ingenic,x2000";
+
+	/* K1 has no host-side ADXL345 (the accelerometer sits on the nozzle MCU). */
+	aliases {
+		/delete-property/ spi2;
+	};
+	/delete-node/ spi_gpio_adxl345;
+
+	/* KE panel is 480x272; K1 needs its own panel driver (see below). */
+	/delete-node/ openke_panel;
+
+	/* KE power key on PE31; the K1 has none. Keeps the touchscreen at
+	 * /dev/input/event0, where GuppyScreen expects it. */
+	/delete-node/ gpio_keys;
+
+	/* BT power (cywdhd.sh): bt_reg_on=PE00, host_wake_bt=PE03, bt_wake_host=PE01. */
+	bt_power {
+		ingenic,reg-on-gpio = <&gpe 0 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,wake-gpio = <&gpe 3 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+	};
+
+	/*
+	 * Display: ST7701 RGB panel, 480x800, initialised over a 9-bit bit-banged SPI
+	 * (lcd_st7701_9bit_spi_tjc_480_800.sh). The printer ships with several panels;
+	 * the bootloader detects which one and passes lcm_id=<n> on the cmdline:
+	 * this unit reports lcm_id=3 = "tjc". Other variants: tjc_lc, dc, pj, pj_lc,
+	 * gc9503cv_ue. TODO: driver "creality,k1-panel" (port of
+	 * displays/panel-st7701s-rgb666.c) with the init sequences extracted from
+	 * the stock lcd_*.ko modules, selected by lcm_id.
+	 */
+	k1_panel: k1_panel {
+		compatible = "creality,k1-panel";
+		ingenic,vdd-en-gpio = <&gpc 21 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,rst-gpio = <&gpb 29 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,lcd-sck-gpio = <&gpc 27 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,lcd-sdi-gpio = <&gpc 28 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,lcd-cs-gpio = <&gpa 2 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		ingenic,lcd-sdo-gpio = <&gpb 16 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		status = "okay";
+	};
+
+	/* Status LED (stock DT /leds/sys_led): PA13, active low. */
+	leds {
+		compatible = "gpio-leds";
+		sys_led {
+			label = "sys-led";
+			gpios = <&gpa 13 GPIO_ACTIVE_LOW INGENIC_GPIO_NOBIAS>;
+			default-state = "on";
+		};
+	};
+
+	/*
+	 * SWD to the mainboard MCU (GD32F303), stock DT /swd "creality,swd":
+	 * SWDIO=PA10, SWCLK=PA06, NRST=PA07 (active low). Kept as plain GPIOs so
+	 * OpenOCD (linuxgpiod adapter) can flash open Klipper MCU firmware.
+	 */
+};
+
+/* ---- UARTs (stock DT + printer.cfg) ----------------------------------- */
+
+/* ttyS1: nozzle MCU (GD32F303CBT6). Same 2-pin group NebulaOS uses on the KE. */
+&uart1 {
+	status = "okay";
+};
+
+/* ttyS2: console (cmdline console=ttyS2). */
+&uart2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pd>;
+};
+
+/* ttyS3: Bluetooth half of the CYW43438 (stock uart3-pd group, gpd 0-3). */
+&uart3 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_pd>;
+};
+
+/* The KE console; disabled on stock K1. */
+&uart4 {
+	status = "disabled";
+};
+
+/* ttyS5: enabled on stock (uart5-pa). Purpose not yet identified. */
+&uart5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart5_pa>;
+};
+
+/* ttyS7: mainboard MCU (GD32F303RET6). */
+&uart7 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart7_pa>;
+};
+
+/* ttyS9: leveling MCU (GD32E230F8P6, strain gauges). */
+&uart9 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart9_pb>;
+};
+
+/* ---- I2C --------------------------------------------------------------- */
+
+/* Touch (gt9xx_touch.sh / tlsc6x.sh): i2c4, reset PA00, irq PA03, 480x800. */
+&i2c4 {
+	/delete-node/ ns2009@48;
+
+	touchscreen@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+		interrupt-parent = <&gpa>;
+		interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+		irq-gpios = <&gpa 3 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		reset-gpios = <&gpa 0 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+		touchscreen-size-x = <480>;
+		touchscreen-size-y = <800>;
+	};
+	/* Second touch controller fitted to some units: tlsc6x at 0x2e (no mainline driver yet). */
+};
+
+/* BL24C16F EEPROM on i2c2 (PB22/23, soc_i2c.sh). Creality's Klipper reads it
+ * through the Linux host MCU ([bl24c16f] i2c_mcu: rpi, i2c_bus: i2c.2), i.e. via
+ * /dev/i2c-2, so no kernel driver may claim address 0x50. */
+&i2c2 {
+	/delete-node/ eeprom@50;
+};
+
+/* ---- Wi-Fi (soc_msc.sh / cywdhd.sh) ----------------------------------- */
+/* Power rail PA01 is shared with BT and active low, as on the KE.
+ * K1 differs in WL_REG_ON (PE02) and host wake (PD05). */
+&msc1 {
+	wlan-reg-on-gpios = <&gpe 2 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+	bcmdhd_wlan: bcmdhd_wlan {
+		gpio_wl_reg_on = <&gpe 2 GPIO_ACTIVE_LOW INGENIC_GPIO_NOBIAS>;
+		gpio_wl_host_wake = <&gpd 5 GPIO_ACTIVE_HIGH INGENIC_GPIO_NOBIAS>;
+	};
+};
+
+/* ---- Differences found against the live stock K1 (2026-11-05) ---------- */
+/* GPIO IO voltages: stock's CPM_EXCLK_DS (0x100000E0) reads 0x80000003, i.e.
+ * GPA at 3.3 V (bit 30 clear, set by halley5) and the GPE/MSC domain at 1.8 V
+ * (bit 31 set). Stock's devicetree states both; the KE file only states GPA,
+ * so without this the kernel would leave GPE as the bootloader left it.
+ * GPE carries WL_REG_ON, the BT pins and the 32 kHz clock (PE23). */
+&pinctrl {
+	ingenic,gpe_msc_voltage = <GPIO_VOLTAGE_1V8>;
+};
+
+/* PWM: the KE muxes PC01 (PWM1) and PC03 (its buzzer, PWM3). Stock K1 muxes
+ * no PWM pins in its devicetree (backlight PWM0 on PC00 is claimed by the
+ * backlight node), and on the K1 PC03 is claimed by mac0 and PC01 by nothing,
+ * so neither pin is driven here. */
+&pwm {
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+};
+
+/* I2C3 is off on stock (soc_i2c.sh i2c3_is_enable=0). Its pins PD30/PD31
+ * are the console UART2 on the K1. */
+&i2c3 {
+	status = "disabled";
+};

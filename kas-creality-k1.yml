@@ -1,0 +1,33 @@
+header:
+  version: 14
+
+machine: creality-k1
+distro: k1os
+target: k1-image
+
+repos:
+  meta-creality-k1:
+    path: meta-creality-k1
+
+  poky:
+    url: https://git.yoctoproject.org/poky
+    branch: scarthgap
+    layers:
+      meta:
+      meta-poky:
+
+  meta-openembedded:
+    url: https://github.com/openembedded/meta-openembedded.git
+    branch: scarthgap
+    layers:
+      meta-oe:
+      meta-python:
+      meta-networking:
+      meta-webserver:
+
+local_conf_header:
+  k1: |
+    PACKAGE_CLASSES = "package_ipk"
+    INHERIT += "rm_work"
+    BB_NUMBER_THREADS ?= "8"
+    PARALLEL_MAKE ?= "-j 8"

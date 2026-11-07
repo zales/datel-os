@@ -1,0 +1,14 @@
+[Unit]
+Description=K1 OS trial boot: point the next boot at the other slot
+DefaultDependencies=no
+Requires=dev-mmcblk0p1.device
+After=dev-mmcblk0p1.device
+Before=sysinit.target local-fs-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/slot trial
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

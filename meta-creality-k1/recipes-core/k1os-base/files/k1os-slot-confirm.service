@@ -1,0 +1,12 @@
+[Unit]
+Description=K1 OS: stay on this slot if /usr/data/k1os/boot-keep exists
+Requires=usr-data.mount k1os-trial-boot.service
+After=usr-data.mount k1os-datadir.service k1os-trial-boot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/slot confirm
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

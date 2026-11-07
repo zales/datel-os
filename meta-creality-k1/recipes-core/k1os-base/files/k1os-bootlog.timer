@@ -1,0 +1,10 @@
+[Unit]
+Description=K1 OS: save the boot journal 30 s after boot and then every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

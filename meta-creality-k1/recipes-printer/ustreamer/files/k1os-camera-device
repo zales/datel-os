@@ -1,0 +1,13 @@
+#!/bin/sh
+# Print the V4L2 node of the USB camera's main capture stream: the node with
+# index 0 on a USB device. The Creality camera also exposes an H.264 node
+# (index 2) and two metadata nodes, which are not it.
+for n in /sys/class/video4linux/video*; do
+    [ -e "$n" ] || continue
+    [ "$(cat "$n/index" 2>/dev/null)" = 0 ] || continue
+    case "$(readlink -f "$n/device")" in *usb*) ;; *) continue ;; esac
+    echo "/dev/$(basename "$n")"
+    exit 0
+done
+echo "k1os-camera-device: no USB camera found" >&2
+exit 1

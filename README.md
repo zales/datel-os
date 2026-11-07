@@ -1,0 +1,121 @@
+# K1 OS: otevřený firmware pro Creality K1 na Yoctu
+
+Cíl je vlastní systém postavený celý ze zdrojových kódů: jádro, systém, Klipper, Moonraker, webové rozhraní, aplikace na displej i firmware všech tří MCU. Stock bootloader zůstává, takže se dá kdykoli vrátit ke stock firmwaru ve druhé sadě oddílů.
+
+## Stav
+
+| Část | Stav |
+|---|---|
+| Mapa hardwaru K1 | Hotová, viz [docs/HARDWARE.md](docs/HARDWARE.md) |
+| Formát aktualizací Creality | Rozluštěný a ověřený na oficiálním 1.3.3.46 |
+| Vrstva `meta-creality-k1` (scarthgap) | Bitbake ji načte bez chyb |
+| Jádro 6.6.157-rt pro K1 | Postavené: `xImage` 4,8 MB ve stejném formátu a na stejné adrese jako stock (uImage, 0x80F00000) |
+| Device tree desky K1 | Přeloží se a je zabudovaný v jádře. UARTy odpovídají stocku. Na tiskárně netestovaný |
+| Ovladač displeje K1 | Chybí |
+| Klipper, Moonraker, Mainsail, GuppyScreen | V obrazu: Klipper od Creality, Moonraker v0.8.0-247, Mainsail 2.9.0 na nginx, GuppyScreen. Klipper a Moonraker ověřené pod Pythonem 3.12, na tiskárně netestované |
+| Celý obraz | `out/CR4CU220812S11_ota_img_V9.0.1.0.img`, 62 MB, systém 57 MB (216 MB rozbalený) |
+| Firmware MCU | Chybí, fáze 4 |
+
+## Na čem to stojí
+
+- **Jádro:** Ingenic X2000 SDK, Linux 6.6.157 s PREEMPT_RT, z repozitáře [NebulaOS-KE/NebulaOS-kernel](https://github.com/NebulaOS-KE/NebulaOS-kernel), větev `openke`. NebulaOS na něm provozuje otevřený firmware pro Ender-3 V3 KE, který má stejný čip a z velké části stejné zapojení. Commit d86790d je stejný, jaký pinuje NebulaOS-firmware 1.0. Obsahuje všech 8 jejich oprav, které dřív přidávaly skripty při sestavení: PREEMPT_RT, in-band IRQ a vysokou rychlost SDIO pro Wi-Fi, VSYNC u displeje, opravu pinctrl, řízení podsvícení, čtení stavu PWM, ovladač dotyku NS2009 a vypnutý roaming v brcmfmac. Od 3. 10. 2026 jsou to commity v jádře (NebulaOS-firmware b93415a). Konfigurace se od NebulaOS liší jen v tom, co potřebuje K1: device tree K1, Goodix, Bluetooth, squashfs XZ a brcmfmac jako modul s firmwarem v rootfs.
+- **Desková podpora K1:** device tree `creality_k1.dts` přebírá desku KE a mění, v čem se K1 liší: konzoli, UARTy pro MCU, dotyk, displej, piny Wi-Fi a Bluetooth. Každá hodnota odkazuje na stock soubor, ze kterého pochází.
+- **Systém:** Yocto scarthgap (poky, meta-oe, meta-python, meta-networking), systemd, kořen jen pro čtení.
+- **Balík aktualizace:** typ obrazu `creality-ota` vyrobí `.img`, který nainstaluje stock aktualizace i vlastní updater. Obsahuje jádro a squashfs systému a zapisuje se do neaktivní sady oddílů.
+
+## Build
+
+Nejjednodušeji `./build.sh`, výsledek je v Docker volume a v logu `build-last.log` tamtéž.
+
+Potřebuje Docker. Build musí běžet na souborovém systému, který rozlišuje velikost písmen, proto pracovní adresář žije v Docker volume.
+
+```bash
+docker volume create k1yocto-work
+docker run --rm -u root -v k1yocto-work:/work -v "$PWD":/src:ro --entrypoint bash ghcr.io/siemens/kas/kas:4.7 -c \
+  'mkdir -p /work/k1-yocto && cp -r /src/meta-creality-k1 /src/kas-creality-k1.yml /work/k1-yocto/ && chown -R builder:builder /work &&
+   su builder -c "cd /work/k1-yocto && KAS_WORK_DIR=/work/k1-yocto kas build kas-creality-k1.yml"'
+```
+
+## Úskalí, která jsou známá dopředu
+
+- **Bootloader předává `init=/linuxrc`.** Obraz proto vytváří `/linuxrc` jako odkaz na `/sbin/init`.
+- **Typ displeje vybírá bootloader** parametrem `lcm_id`. Tahle tiskárna má `lcm_id=3`, panel ST7701 „tjc“. Existuje ještě dalších pět variant panelu.
+- **Oddíl `mmcblk0p9` je zapisovatelná vrstva stocku** a jsou v ní tvoje úpravy. K1 OS ho nesmí připojit. Data ukládá jen do `/usr/data/k1os`.
+- **RTOS pro třetí jádro (`zero.bin`) je uzavřený.** Balík K1 OS ho neobsahuje a slot si nechá ten stávající.
+- **Firmware Wi-Fi čipu je binární** (cyfmac43430 z linux-firmware). Jinak to nejde. NVRAM (kalibrace rádia) je soubor modulu AP6212A ze stocku, stejný jako v Ingenic SDK, jen s `ccode=CN`. Recept `k1-wifi-nvram` ho instaluje jako `brcmfmac43430-sdio.creality,k1.txt` a obecné jméno na něj odkazuje.
+- **Regulační databáze Wi-Fi** (`wireless-regdb-static`) je v obrazu, takže jádro použije zemi z `wpa_supplicant.conf`.
+- **Wi-Fi přebírá nastavení ze stocku.** Při prvním startu se `/usr/data/wpa_supplicant.conf` zkopíruje do `/usr/data/k1os/`. Další změny se mezi systémy nepřenáší.
+- **MAC adresa je stejná jako na stocku.** Skript `wifi-mac` ji před spuštěním wpa_supplicant čte z oddílu `sn_mac`, potom z `/usr/data/macaddr.txt`. Router tak tiskárně dá stejnou IP.
+- **Jádro neobsahuje žádnou cizí binárku.** Jediná, kód pro probuzení ze spánku, se překládá ze zdroje ve stromu. Překlad novějším GCC se od dodané binárky liší, ale velikost sedí.
+
+## Co je ověřené bez flashování (5. 11. 2026)
+
+Zjištěno ze zálohy bootloaderu a čtením ze živého stocku, na tiskárně se nic nezměnilo.
+
+**Bootloader**
+- Slot vybírá už SPL podle textu v p1 (`ota:kernel` nebo `ota:kernel2`). Pak načte RTOS daného slotu (p3 nebo p4), jádro (p5 nebo p6) a spustí ho s `root=/dev/mmcblk0p7` nebo `p8`.
+- Žádné počítadlo pokusů ani automatický návrat na stock nemá. NebulaOS to pro stejný bootloader na KE potvrzuje. Když nové jádro zamrzne, zamrzne při každém startu.
+- Plný U-Boot 2013.07 v obrazu je, s `bootdelay=1` a výzvou „Hit any key to stop autoboot“. Jestli ho SPL při běžném startu vůbec spouští, ukáže až konzole na J1.
+- RTOS ve slotu 2 (p4) má platnou hlavičku. Balík K1 OS ho nepřepisuje.
+- Stock jádro nemá kexec, takže nové jádro nejde vyzkoušet bez restartu.
+
+**Wi-Fi piny (živý stock, `hardware/stock-gpio-live.txt`)**
+
+| Signál | Stock | K1 OS |
+|---|---|---|
+| Napájení PA01 | výstup, 0 (zapnuto) | regulátor aktivní v nule, vždy zapnutý |
+| WL_REG_ON PE02 | výstup, 1 | `wlan-reg-on-gpios`, ovladač nastaví 1 |
+| Host wake PD05 | vstup s IRQ | přerušení přes SDIO, PD05 v uzlu bcmdhd |
+| 32 kHz PE23 | funkce clk32k | stav `enable` při zapnutí Wi-Fi (late_initcall z NebulaOS) |
+| SDIO msc1 PD08–13 | msc1, 4 bity | `msc1-4bit` |
+
+**Device tree proti stocku**
+- UARTy 1, 2, 3, 5, 7 a 9 mají stejné skupiny pinů jako stock. I2C2, I2C4, msc0 a msc1 také.
+- Opraveno podle stocku: napětí banky GPE 1,8 V (stock má v registru 0x100000E0 hodnotu 0x80000003), PWM bez muxu PC01/PC03 a vypnutá I2C3, která leží na pinech konzole.
+- Dotyk: na stocku teď není žádné vstupní zařízení. Goodix (0x14) ani tlsc6x (0x2e) se nenavázal, protože displej je u této tiskárny fyzicky odpojený. Displej, dotyk a GuppyScreen proto půjde ověřit až po jeho připojení. První start na ně nečeká.
+
+**Záchrana bez J1**
+- [ballaswag/ingenic-usbboot](https://github.com/ballaswag/ingenic-usbboot) je psaný přímo pro K1. Nahraje vlastní SPL a U-Boot přes USB v režimu mask-ROM a umí přepnout p1 (`--swap-ota`) nebo číst oddíly. Nepoužívá soubor Creality cloneru, který na deskách S12 podle fóra selhává. Na S12 zatím ověřený není.
+- Zkouška bez rizika: přečíst přes USB p1 a porovnat se zálohou. Postup je v `tools/usbboot/README.md`.
+
+## Zkušební start ze slotu 2
+
+Stock běží ze slotu 1 a zůstává tam. K1 OS se zapíše do slotu 2 (p6 a p8) přes SSH skriptem `tools/flash-slot2.sh`.
+
+1. `tools/flash-slot2.sh` jen kontroluje: běží slot 1, ukazatel je `ota:kernel`, netiskne se a obrazy se vejdou.
+2. `tools/flash-slot2.sh --write` zapíše jádro a systém, každý oddíl zpětně přečte a porovná MD5. Do `/usr/data/k1os/ssh/authorized_keys` přidá veřejný klíč `~/.ssh/k1_printer_ecdsa.pub`. Ukazatel nemění.
+3. `tools/flash-slot2.sh --switch` přepne ukazatel v p1 na `ota:kernel2`. Pak tiskárnu vypni a zapni.
+
+**Zkušební režim.** Hned na začátku startu K1 OS (`k1os-trial-boot.service`, před připojením souborových systémů) přepne ukazatel zpátky na `ota:kernel`. Když se systém kdekoli potom zasekne, stačí vypnout a zapnout a naběhne stock. Na novém systému zůstane tiskárna až po `k1os-slot keep`. `k1os-slot status` ukáže, odkud běží a kam půjde příští start.
+
+**Co tím chráněné není:** zaseknutí jádra dřív, než spustí první službu, například kvůli device tree nebo ovladači eMMC. Pak tiskárna startuje pořád do slotu 2 a vrátit ji jde jen přes USB (`usbboot --swap-ota`, `tools/usbboot/README.md`).
+
+**Co se tím přepíše:** slot 2, kde je teď starší stock 1.3.3.x. Jeho kopie je v záloze v `~/Documents/K1-zaloha-2026-11-05`.
+
+## První starty na tiskárně (7. 11. 2026)
+
+K1 OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-Fi se stejnou MAC jako stock, zkušební režim vrací ukazatel na stock. Chyby, které první starty odhalily, a jejich opravy:
+
+| Co selhalo | Příčina | Oprava |
+|---|---|---|
+| SSH odmítalo klíč | poky na systému jen pro čtení spouští sshd s `sshd_config_readonly`; sshd bere první hodnotu klíčového slova | blok K1 OS je na začátku obou souborů (`openssh_%.bbappend`) |
+| Jiná IP (.102) | systemd-networkd se routeru hlásí vygenerovaným ID, ne MAC | `[DHCPv4] ClientIdentifier=mac` v `80-wlan.network` |
+| nginx neběžel | `listen [::]:80`, jádro nemá IPv6 | řádek odstraněn z `mainsail.nginx` |
+| Moonraker padal při importu | `streaming-form-data` importuje `smart_open` | recept `python3-smart-open` (+ `wrapt` z meta-python) |
+| Klipper se restartoval každých 5 s | `klipper_mcu` od Creality nezná `-I`, jednotka padala a `Requires=` zastavovalo Klipper | `klipper_mcu -r`, `Wants=` místo `Requires=` |
+| GuppyScreen padal na parsování JSON | otevírá téma pro zápis, na rootu jen pro čtení otevření selže a parsuje prázdný proud | témata se při prvním startu kopírují do `/usr/data/k1os/guppyscreen/themes`; služba má `ConditionPathExists=/dev/fb0` |
+
+**První tisk a FPU (7. 11. 2026):** první pokus spadl na chybě v Creality `virtual_sdcard.py` (proměnné bez výchozí hodnoty, když chybí `user_print_refer.json`; opraveno sedem v receptu a kopií stock nastavení z `creality/userdata/config` při prvním startu). Druhý pokus zhomoval, zahřál a začal tisknout, po pár vteřinách ale MCU vypnulo s „Missed scheduling of next digital out event“. Příčina: hostitelský Klipper trávil 90 % času v jádře, čítače `/sys/kernel/debug/mips/fpuemustats` ukázaly 1,7 miliardy emulovaných instrukcí. FPU XBurst2 má 64bitové registry a jen kódování NaN 2008, legacy režim FR=0 neumí. Tune `mips32r2el` z poky ale staví o32 FP32 ABI s legacy NaN, takže jádro každou FPU instrukci emuluje. Stock userspace je přeložený s `-mfp64 -mnan=2008` (e_flags 0x70001407). Oprava: vlastní tune `mips32r2el-fp64` (`conf/machine/include/tune-mips32r2el-fp64.inc`) a gcc s `--with-fp-32=64 --with-nan=2008`; to znamená přeložit celý userspace znovu. Vedlejší nález: `clock_gettime` stojí 12 µs (OST clocksource pod spinlockem, bez vDSO), proti 1,2 µs za obyčejný syscall.
+
+**Kamera (7. 11. 2026):** kamera Creality (UVC 0c45:6366) dává MJPEG i H.264 v 1080p30 přímo z hardwaru. Obraz obsahuje upstream [pikvm/ustreamer](https://github.com/pikvm/ustreamer) 6.67, který MJPEG jen přeposílá (`--encoder=HW`), služba `ustreamer.service` si uzel kamery najde sama (`camera-device`: uzel s indexem 0 na USB), nginx ho vystavuje na `/webcam/` a `k1os-seed-webcam` kameru jednou zaregistruje v Moonrakeru, takže ji Mainsail ukáže sám. Výchozí je 1280×720 při 15 fps. Fork z NebulaOS není potřeba, ten řeší surový NV12 jiné kamery.
+
+Ověřeno naživo přes SSH: Mainsail přes nginx, Moonraker se všemi komponentami, Klipper ve stavu `ready` s hlavním i tryskovým MCU přes ttyS7 a ttyS1 (přeložený C helper na MIPS funguje), čtení teplot. Chybí `/dev/fb0`, protože ovladač panelu K1 ještě není.
+
+## Fáze
+
+0. **Záchrana:** připravit nahrávání přes USB (Ingenic cloner) a zálohu celé eMMC. Bez toho se nic nenahrává.
+1. **První boot:** jádro a minimální systém do neaktivního slotu. Cíl je konzole na ttyS2, SSH, Wi-Fi a připojené `/usr/data`.
+2. **Tisk:** Klipper, Moonraker a Mainsail, zatím se stock firmwarem MCU. Senzor prtouch jako rozšíření Klipperu podle zdrojů Creality.
+3. **Displej:** ovladač panelu K1 (inicializace ze stock modulů `lcd_*.ko`) a dotyková aplikace v LVGL, vycházející z GuppyScreen a NebulaScreen.
+4. **MCU:** otevřený Klipper pro hlavní desku GD32F303 (nahrání přes SWD a OpenOCD), pro hlavu GD32F303 a pro desku senzoru GD32E230.
+5. **Aktualizace:** vlastní A/B updater s automatickým návratem.

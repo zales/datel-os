@@ -1,0 +1,12 @@
+[Unit]
+Description=Persistent printer data (shared with the stock slot)
+Before=local-fs.target
+
+[Mount]
+What=/dev/mmcblk0p10
+Where=/usr/data
+Type=ext4
+Options=noatime
+
+[Install]
+WantedBy=local-fs.target

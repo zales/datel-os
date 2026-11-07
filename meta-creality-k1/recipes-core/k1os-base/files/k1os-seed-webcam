@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Register the K1 camera in Moonraker once, so Mainsail shows it without setup.
+A webcam stored in Moonraker's database stays editable in the UI, unlike one
+defined in moonraker.conf."""
+import json, sys, time, urllib.request
+
+BASE = "http://127.0.0.1:7125"
+MARKER = "/usr/data/k1os/webcam-seeded"
+CAM = {
+    "name": "K1", "location": "printer", "enabled": True,
+    "service": "mjpegstreamer-adaptive",
+    "stream_url": "/webcam/?action=stream", "snapshot_url": "/webcam/?action=snapshot",
+    "target_fps": 15, "target_fps_idle": 5, "aspect_ratio": "16:9",
+    "rotation": 0, "flip_horizontal": False, "flip_vertical": False,
+}
+
+def req(path, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    r = urllib.request.Request(BASE + path, data=data, method="POST" if data else "GET",
+                               headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(r, timeout=8) as resp:
+        return json.load(resp)["result"]
+
+try:
+    open(MARKER).close(); sys.exit(0)
+except FileNotFoundError:
+    pass
+for _ in range(60):
+    try:
+        if any(w.get("name") == CAM["name"] for w in req("/server/webcams/list")["webcams"]):
+            break
+        req("/server/webcams/item", CAM)
+        print("k1os-seed-webcam: registered camera 'K1' in Moonraker")
+        break
+    except Exception as e:
+        err = e; time.sleep(5)
+else:
+    print("k1os-seed-webcam: Moonraker not reachable: %s" % err, file=sys.stderr); sys.exit(1)
+open(MARKER, "w").close()

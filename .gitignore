@@ -1,0 +1,6 @@
+# Build outputs (60 MB images)
+out/
+# kas/bitbake scratch if ever run locally
+build/
+*.log
+.DS_Store

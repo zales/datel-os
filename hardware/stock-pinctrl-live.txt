@@ -1,0 +1,88 @@
+===pins
+Pinmux settings per pin
+Format: pin (name): mux_owner gpio_owner hog?
+pin 1 (GPA-1): (MUX UNCLAIMED) GPA:1
+pin 2 (GPA-2): (MUX UNCLAIMED) GPA:2
+pin 4 (GPA-4): 10035000.serial (GPIO UNCLAIMED) function uart5-pin group uart5-pa
+pin 5 (GPA-5): 10035000.serial (GPIO UNCLAIMED) function uart5-pin group uart5-pa
+pin 6 (GPA-6): (MUX UNCLAIMED) GPA:6
+pin 7 (GPA-7): (MUX UNCLAIMED) GPA:7
+pin 8 (GPA-8): 10037000.serial (GPIO UNCLAIMED) function uart7-pin group uart7-pa
+pin 9 (GPA-9): 10037000.serial (GPIO UNCLAIMED) function uart7-pin group uart7-pa
+pin 10 (GPA-10): (MUX UNCLAIMED) GPA:10
+pin 13 (GPA-13): (MUX UNCLAIMED) GPA:13
+pin 15 (GPA-15): (MUX UNCLAIMED) GPA:15
+pin 32 (GPB-0): (MUX UNCLAIMED) GPB:32
+pin 33 (GPB-1): (MUX UNCLAIMED) GPB:33
+pin 34 (GPB-2): (MUX UNCLAIMED) GPB:34
+pin 35 (GPB-3): (MUX UNCLAIMED) GPB:35
+pin 36 (GPB-4): (MUX UNCLAIMED) GPB:36
+pin 37 (GPB-5): (MUX UNCLAIMED) GPB:37
+pin 38 (GPB-6): (MUX UNCLAIMED) GPB:38
+pin 39 (GPB-7): (MUX UNCLAIMED) GPB:39
+pin 40 (GPB-8): (MUX UNCLAIMED) GPB:40
+pin 41 (GPB-9): (MUX UNCLAIMED) GPB:41
+pin 42 (GPB-10): (MUX UNCLAIMED) GPB:42
+pin 43 (GPB-11): (MUX UNCLAIMED) GPB:43
+pin 44 (GPB-12): (MUX UNCLAIMED) GPB:44
+pin 45 (GPB-13): (MUX UNCLAIMED) GPB:45
+pin 46 (GPB-14): (MUX UNCLAIMED) GPB:46
+pin 47 (GPB-15): (MUX UNCLAIMED) GPB:47
+pin 48 (GPB-16): (MUX UNCLAIMED) GPB:48
+pin 54 (GPB-22): (MUX UNCLAIMED) GPB:54
+pin 55 (GPB-23): (MUX UNCLAIMED) GPB:55
+pin 56 (GPB-24): (MUX UNCLAIMED) GPB:56
+pin 57 (GPB-25): (MUX UNCLAIMED) GPB:57
+pin 58 (GPB-26): (MUX UNCLAIMED) GPB:58
+pin 59 (GPB-27): (MUX UNCLAIMED) GPB:59
+pin 61 (GPB-29): (MUX UNCLAIMED) GPB:61
+pin 62 (GPB-30): 10039000.serial (GPIO UNCLAIMED) function uart9-pin group uart9-pb
+pin 63 (GPB-31): 10039000.serial (GPIO UNCLAIMED) function uart9-pin group uart9-pb
+pin 64 (GPC-0): (MUX UNCLAIMED) GPC:64
+pin 66 (GPC-2): (MUX UNCLAIMED) GPC:66
+pin 67 (GPC-3): (MUX UNCLAIMED) GPC:67
+pin 69 (GPC-5): (MUX UNCLAIMED) GPC:69
+pin 70 (GPC-6): (MUX UNCLAIMED) GPC:70
+pin 71 (GPC-7): (MUX UNCLAIMED) GPC:71
+pin 74 (GPC-10): (MUX UNCLAIMED) GPC:74
+pin 75 (GPC-11): (MUX UNCLAIMED) GPC:75
+pin 76 (GPC-12): (MUX UNCLAIMED) GPC:76
+pin 77 (GPC-13): (MUX UNCLAIMED) GPC:77
+pin 79 (GPC-15): (MUX UNCLAIMED) GPC:79
+pin 84 (GPC-20): (MUX UNCLAIMED) GPC:84
+pin 85 (GPC-21): (MUX UNCLAIMED) GPC:85
+pin 86 (GPC-22): (MUX UNCLAIMED) GPC:86
+pin 87 (GPC-23): 10031000.serial (GPIO UNCLAIMED) function uart1-pin group uart1-pc
+pin 88 (GPC-24): 10031000.serial (GPIO UNCLAIMED) function uart1-pin group uart1-pc
+pin 89 (GPC-25): (MUX UNCLAIMED) GPC:89
+pin 90 (GPC-26): (MUX UNCLAIMED) GPC:90
+pin 91 (GPC-27): (MUX UNCLAIMED) GPC:91
+pin 92 (GPC-28): (MUX UNCLAIMED) GPC:92
+pin 96 (GPD-0): 10033000.serial (GPIO UNCLAIMED) function uart3-pin group uart3-pd
+pin 97 (GPD-1): 10033000.serial (GPIO UNCLAIMED) function uart3-pin group uart3-pd
+pin 98 (GPD-2): 10033000.serial (GPIO UNCLAIMED) function uart3-pin group uart3-pd
+pin 99 (GPD-3): 10033000.serial (GPIO UNCLAIMED) function uart3-pin group uart3-pd
+pin 101 (GPD-5): (MUX UNCLAIMED) GPD:101
+pin 104 (GPD-8): (MUX UNCLAIMED) GPD:104
+pin 105 (GPD-9): (MUX UNCLAIMED) GPD:105
+pin 106 (GPD-10): (MUX UNCLAIMED) GPD:106
+pin 107 (GPD-11): (MUX UNCLAIMED) GPD:107
+pin 108 (GPD-12): (MUX UNCLAIMED) GPD:108
+pin 109 (GPD-13): (MUX UNCLAIMED) GPD:109
+pin 113 (GPD-17): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 114 (GPD-18): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 115 (GPD-19): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 116 (GPD-20): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 117 (GPD-21): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 118 (GPD-22): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 119 (GPD-23): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 120 (GPD-24): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 121 (GPD-25): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 122 (GPD-26): 13450000.msc (GPIO UNCLAIMED) function msc0-pin group msc0-8bit
+pin 126 (GPD-30): 10032000.serial (GPIO UNCLAIMED) function uart2-pin group uart2-pd
+pin 127 (GPD-31): 10032000.serial (GPIO UNCLAIMED) function uart2-pin group uart2-pd
+pin 128 (GPE-0): (MUX UNCLAIMED) GPE:128
+pin 129 (GPE-1): (MUX UNCLAIMED) GPE:129
+pin 130 (GPE-2): (MUX UNCLAIMED) GPE:130
+pin 131 (GPE-3): (MUX UNCLAIMED) GPE:131
+pin 151 (GPE-23): (MUX UNCLAIMED) GPE:151

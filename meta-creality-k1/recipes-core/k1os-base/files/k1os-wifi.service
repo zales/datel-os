@@ -1,0 +1,17 @@
+[Unit]
+Description=Wi-Fi (wpa_supplicant on wlan0, config in /usr/data/k1os)
+Requires=k1os-datadir.service sys-subsystem-net-devices-wlan0.device
+BindsTo=sys-subsystem-net-devices-wlan0.device
+After=k1os-datadir.service sys-subsystem-net-devices-wlan0.device
+Before=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/libexec/k1os/wifi-mac
+ExecStart=/usr/sbin/wpa_supplicant -i wlan0 -c /usr/data/k1os/wpa_supplicant.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

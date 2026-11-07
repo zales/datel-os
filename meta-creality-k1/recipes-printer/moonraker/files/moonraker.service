@@ -1,0 +1,15 @@
+[Unit]
+Description=Moonraker API server for Klipper
+Requires=k1os-datadir.service
+After=k1os-datadir.service network-online.target klipper.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /usr/share/moonraker/moonraker/moonraker.py -d /usr/data/k1os/printer_data
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

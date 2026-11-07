@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare the K1 OS namespace on /usr/data
+RequiresMountsFor=/usr/data
+ConditionPathIsDirectory=/usr/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/datadir-setup
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

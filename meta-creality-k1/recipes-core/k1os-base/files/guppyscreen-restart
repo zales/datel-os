@@ -1,0 +1,3 @@
+#!/bin/sh
+# GuppyScreen calls its "init script" with restart/stop/start.
+exec systemctl "${1:-restart}" guppyscreen.service

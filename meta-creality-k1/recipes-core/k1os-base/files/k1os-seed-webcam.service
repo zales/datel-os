@@ -1,0 +1,12 @@
+[Unit]
+Description=K1 OS: register the camera in Moonraker once
+Requires=usr-data.mount
+After=usr-data.mount moonraker.service
+ConditionPathExists=!/usr/data/k1os/webcam-seeded
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/seed-webcam
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,71 @@
+#!/bin/sh
+# Boot slot marker in mmcblk0p1, read by the stock SPL on every power-up:
+#   "ota:kernel"  -> slot 1 (kernel p5, rootfs p7)
+#   "ota:kernel2" -> slot 2 (kernel p6, rootfs p8)
+# The SPL has no boot counter and no fallback, so K1 OS boots as a trial:
+#   trial    first thing at boot: point the marker at the other slot, so a
+#            hang or a power cycle from here on brings the other system back
+#   confirm  after /usr/data is up: point it back at this slot, but only if
+#            /usr/data/k1os/boot-keep exists
+#   keep     create boot-keep and stay on this slot from now on
+#   release  remove boot-keep; the next boot goes to the other slot
+#   status   show the running slot, the next slot and boot-keep
+
+M=/dev/mmcblk0p1
+KEEP=/usr/data/k1os/boot-keep
+
+running() {
+    case " $(cat /proc/cmdline) " in
+        *" root=/dev/mmcblk0p8 "*) echo ota:kernel2 ;;
+        *" root=/dev/mmcblk0p7 "*) echo ota:kernel ;;
+        *) echo unknown ;;
+    esac
+}
+
+other() {
+    case "$(running)" in
+        ota:kernel2) echo ota:kernel ;;
+        ota:kernel) echo ota:kernel2 ;;
+        *) echo unknown ;;
+    esac
+}
+
+current() {
+    dd if=$M bs=512 count=1 2>/dev/null | tr -d '\000' | head -n 1
+}
+
+write() {
+    [ "$(current)" = "$1" ] && return 0
+    # Build the whole 512-byte block first (text, two newlines, zeros, as
+    # stock writes it) and write it in one go, so p1 is never left half-written.
+    n=$((${#1} + 2))
+    b=/run/k1os-slot.$$
+    { printf '%s\n\n' "$1"; dd if=/dev/zero bs=$((512 - n)) count=1 2>/dev/null; } > $b
+    dd if=$b of=$M bs=512 count=1 2>/dev/null
+    rm -f $b
+    sync
+    if [ "$(current)" != "$1" ]; then
+        echo "k1os-slot: marker write failed, p1 reads '$(current)'" >&2
+        return 1
+    fi
+    echo "k1os-slot: next boot is $1"
+}
+
+case "$1" in
+    trial)
+        o=$(other)
+        [ "$o" = unknown ] && { echo "k1os-slot: unknown root in /proc/cmdline, marker untouched" >&2; exit 0; }
+        write "$o" ;;
+    confirm)
+        if [ -e $KEEP ]; then write "$(running)"; else echo "k1os-slot: trial boot, next boot is $(current)"; fi ;;
+    keep)
+        touch $KEEP && write "$(running)" ;;
+    release)
+        rm -f $KEEP; write "$(other)" ;;
+    status)
+        echo "running: $(running)"
+        echo "next:    $(current)"
+        if [ -e $KEEP ]; then echo "keep:    yes"; else echo "keep:    no (trial)"; fi ;;
+    *)
+        echo "usage: k1os-slot trial|confirm|keep|release|status" >&2; exit 1 ;;
+esac

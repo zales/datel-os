@@ -1,0 +1,15 @@
+[Unit]
+Description=Guppy Screen touch UI
+Requires=k1os-datadir.service
+After=k1os-datadir.service moonraker.service
+# No panel driver yet: without a framebuffer the UI cannot start, so don't restart-loop.
+ConditionPathExists=/dev/fb0
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/guppyscreen/guppyscreen
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
