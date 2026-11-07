@@ -79,29 +79,34 @@ TAG=v0.3.0 tools/release.sh notes > /tmp/notes.md && gh release create v0.3.0 re
 
 ## Instalace na tiskárnu
 
-Datel OS se zapisuje do slotu 2 (`mmcblk0p6` + `mmcblk0p8`), stock zůstává ve slotu 1. Postup je stejný jako v README, jen soubory jsou z Release.
+Datel OS se zapisuje do slotu, ze kterého tiskárna zrovna neběží: ze stocku (slot 1) do slotu 2 (`mmcblk0p6` + `mmcblk0p8`), z běžícího Datel OS do druhého slotu podle `SLOT=`. Postup je stejný jako v README, jen soubory jsou z Release.
 
-1. Na tiskárně běží stock ze slotu 1. Když zrovna běží Datel OS, vypni a zapni tiskárnu (zkušební režim vrátí stock); pokud jsi dřív spustil `k1os-slot keep`, nejdřív na Datel OS zadej `k1os-slot release` a pak restartuj.
-2. Stáhni soubory vydání a ověř součty:
+**Předpoklad:** root přes SSH na tiskárně klíčem `~/.ssh/k1_printer_ecdsa`. Na stocku se klíč nahraje jednou přes `ssh-copy-id -i ~/.ssh/k1_printer_ecdsa.pub root@<ip>` (heslo roota stock firmwaru uvádí Creality v návodu k rootování), Datel OS ho pak převezme z `/usr/data/k1os/ssh/authorized_keys`. Tiskárna nesmí tisknout.
+
+1. Stáhni soubory vydání a ověř součty:
 
 ```bash
 gh release download v0.3.0 -R zales/k1-yocto -D dl/ && (cd dl && shasum -a 256 -c SHA256SUMS)
 ```
 
-3. Zapiš slot 2, ověř a přepni ukazatel (`PRINTER=root@<ip>`, klíč `~/.ssh/k1_printer_ecdsa`):
+2. Zapiš, ověř a přepni ukazatel. Ze stocku do slotu 2 (`PRINTER=root@<ip>`):
 
 ```bash
-KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-klipper-creality.squashfs PRINTER=root@192.168.1.104 tools/flash-slot2.sh --write
+KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --write
 ```
 
 ```bash
-KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-klipper-creality.squashfs PRINTER=root@192.168.1.104 tools/flash-slot2.sh --switch
+KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --switch
 ```
 
-4. Vypni a zapni tiskárnu. Datel OS naběhne ve zkušebním režimu: první věc po startu přepne ukazatel v p1 zpátky na stock, takže další vypnutí a zapnutí vrátí stock. Až budeš s verzí spokojený, na tiskárně `k1os-slot keep`; `k1os-slot status` ukáže, odkud běží a kam půjde příští start.
+   Z běžícího Datel OS do druhého slotu přidej `SLOT=1` nebo `SLOT=2` (ten, ze kterého tiskárna neběží; skript to kontroluje a odmítne zapsat do běžícího). Bez `--write` skript jen kontroluje a nic nezapisuje.
+
+3. Restartuj (ze stocku vypni a zapni, z Datel OS stačí `reboot`). Nový systém naběhne ve zkušebním režimu: první věc po startu přepne ukazatel v p1 na druhý slot, takže zaseknutí nebo vypnutí a zapnutí vrátí předchozí systém. Až budeš spokojený, na tiskárně `k1os-slot keep`; `k1os-slot status` ukáže, odkud běží a kam půjde příští start. Když už `keep` platí z dřívějška, nový slot ho převezme (soubor `boot-keep` je v `/usr/data`, společném oběma slotům).
+
+4. Při prvním startu po přechodu ze stocku do Datel OS teplým restartem zůstane hlavní MCU ve stavu shutdown a Klipper ohlásí chybu konfigurace; jeden `FIRMWARE_RESTART` to srovná. Mezi dvěma slot Datel OS se to neděje.
 
 Varianta `kalico` při prvním studeném startu nahraje vlastní firmware do všech tří MCU (asi 10 s); při návratu si stock firmware MCU přeflashuje zpět sám. Podrobnosti o kalibraci sondy a input shaperu jsou v README.
 
-**Balík `.ota.img`** je formát, který instaluje stock aktualizátor Creality i budoucí vlastní updater (fáze 5). Aktualizátor čeká soubor pojmenovaný stejně jako adresář uvnitř, proto ho před použitím přejmenuj na `CR4CU220812S11_ota_img_V9.X.Y.Z.img` (přesné jméno je v poznámkách k vydání). Instalace přes stock aktualizátor zatím není na tiskárně vyzkoušená; ověřená cesta je `tools/flash-slot2.sh`.
+**Datel OS v obou slotech.** Jakmile druhý slot přepíšeš taky, stock z tiskárny zmizí a A/B slouží jen Datel OS. Předtím zálohuj stock oddíly p1–p5 a p7 (`ssh root@<ip> dd if=/dev/mmcblk0pN bs=1M > mmcblk0pN.bin`, asi 330 MB, MD5 porovnej s `md5sum /dev/mmcblk0pN` na tiskárně); návrat ke stocku je zápis těchto souborů zpět ze spuštěného Datel OS. Bez stocku na tiskárně neběží displej (Datel OS zatím nemá ovladač panelu).
 
-**Aktualizace z běžícího Datel OS** do druhého slotu zatím není: druhý slot je stock a `flash-slot2.sh` odmítne zapisovat, pokud neběží ze slotu 1. Vlastní A/B updater s automatickým návratem je fáze 5.
+**Balík `.ota.img`** je formát, který instaluje stock aktualizátor Creality i budoucí vlastní updater (fáze 5). Aktualizátor čeká soubor pojmenovaný stejně jako adresář uvnitř, proto ho před použitím přejmenuj na `CR4CU220812S11_ota_img_V9.X.Y.Z.img` (přesné jméno je v poznámkách k vydání). Instalace přes stock aktualizátor zatím není na tiskárně vyzkoušená; ověřená cesta je `tools/flash-slot2.sh`.

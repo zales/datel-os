@@ -6,19 +6,32 @@
 
 Cíl je vlastní systém postavený celý ze zdrojových kódů: jádro, systém, Klipper, Moonraker, webové rozhraní, aplikace na displej i firmware všech tří MCU. Stock bootloader zůstává, takže se dá kdykoli vrátit ke stock firmwaru ve druhé sadě oddílů.
 
-## Stav
+## Stav (8. 11. 2026)
+
+Datel OS 0.2.0 „first-tap“ běží na autorově K1 v obou slotech A/B a tiskne. Stock Creality na té tiskárně už není (záloha oddílů existuje). Veřejné vydání je zatím **pre-release pro vývojáře**: tiskárna nemá funkční displej a návrat při selhání jádra jde jen přes USB.
 
 | Část | Stav |
 |---|---|
-| Mapa hardwaru K1 | Hotová, viz [docs/HARDWARE.md](docs/HARDWARE.md) |
-| Formát aktualizací Creality | Rozluštěný a ověřený na oficiálním 1.3.3.46 |
-| Vrstva `meta-creality-k1` (scarthgap) | Bitbake ji načte bez chyb |
-| Jádro 6.6.157-rt pro K1 | Postavené: `xImage` 4,8 MB ve stejném formátu a na stejné adrese jako stock (uImage, 0x80F00000) |
-| Device tree desky K1 | Přeloží se a je zabudovaný v jádře. UARTy odpovídají stocku. Na tiskárně netestovaný |
-| Ovladač displeje K1 | Chybí |
-| Klipper, Moonraker, Mainsail, GuppyScreen | V obrazu: Klipper od Creality, Moonraker v0.8.0-247, Mainsail 2.9.0 na nginx, GuppyScreen. Klipper a Moonraker ověřené pod Pythonem 3.12, na tiskárně netestované |
-| Celý obraz | `out/CR4CU220812S11_ota_img_V9.0.1.0.img`, 62 MB, systém 57 MB (216 MB rozbalený) |
-| Firmware MCU | Chybí, fáze 4 |
+| Jádro 6.6.157-rt, device tree K1 | Běží na tiskárně: eMMC, Wi-Fi se stock MAC, UARTy všech tří MCU, kamera UVC |
+| Systém (Yocto scarthgap, systemd, root jen pro čtení) | Běží; data v `/usr/data/k1os` (p10), A/B sloty p5/p7 a p6/p8, zkušební boot s návratem na druhý slot |
+| Klipper + MCU | **Kalico** s vlastním firmwarem všech tří MCU (GPL, z `pellcorp/k1-kalico-firmware`), sonda z tenzometrů, dva ověřené tisky; alternativně Klipper od Creality se stock firmwarem MCU |
+| Moonraker, Mainsail, kamera | Běží přes nginx; kamera 720p MJPEG přes uStreamer, druhá položka pro vestavěný prohlížeč Orcy |
+| Branding | hostname `datel`, MOTD se stavem tiskárny, prompt, logo a favicon v Mainsailu, boot logo v RTOS (nástrojem mimo obraz) |
+| Vydání | tag `vX.Y.Z` → build na vlastním runneru → GitHub Release (xImage, squashfs obou variant, `.ota.img`, SHA256SUMS) |
+| Ovladač displeje a dotyk | **Chybí.** Obrazovka ukáže jen boot logo z RTOS, GuppyScreen čeká na `/dev/fb0` |
+| Vlastní bootloader | Rozpracovaný na větvi `feat/uboot`, na tiskárně neověřený; stock SPL/U-Boot zůstává |
+| Instalace přes stock aktualizátor (`.ota.img`) | Balík se staví, na tiskárně nevyzkoušený; ověřená cesta je `tools/flash-slot2.sh` |
+
+## Omezení a rizika
+
+Čti před instalací. Pořadí podle toho, co bolí nejvíc.
+
+1. **Displej je mrtvý.** Datel OS nemá ovladač panelu, po startu zůstane logo z RTOS. Ovládání jen přes Mainsail, Orcu nebo SSH.
+2. **Selhání jádra nemá automatický návrat.** Stock SPL nemá počítadlo pokusů; zkušební režim Datel OS chrání až od první služby systemd. Když nové jádro neběží, pomůže jen USB mask-ROM boot (`tools/usbboot/README.md`), na desce S12 zatím neověřený. Jádro z vydání je stejné, jaké běží autorovi, riziko je tedy malé, ale ne nulové.
+3. **Instalace předpokládá root přes SSH na stocku.** Přihlašovací heslo roota stock firmwaru Creality zveřejňuje v dokumentaci rootování; `tools/flash-slot2.sh` se hlásí klíčem, který si na stock nejdřív nahraješ (`ssh-copy-id`).
+4. **Firmware MCU se mění jen při studeném startu.** Po pouhém restartu systému běží v MCU starý firmware a Kalico se nepřipojí; při přechodu ze stocku a zpět tiskárnu vypni a zapni.
+5. **Ověřeno na jedné tiskárně.** K1 s deskou CR4CU220812S11 a panelem `lcm_id=3`, dva tisky z ABS, input shaper osy X podezřelý (slabý přenos), kalibrace sondy z jednoho kusu jako výchozí hodnoty.
+6. **Wi-Fi jen 2,4 GHz** (modul AP6212A) a kamera umí linku zahltit; výchozí 8 fps.
 
 ## Na čem to stojí
 
@@ -94,7 +107,7 @@ Stock běží ze slotu 1 a zůstává tam. Datel OS se zapíše do slotu 2 (p6 a
 
 **Co tím chráněné není:** zaseknutí jádra dřív, než spustí první službu, například kvůli device tree nebo ovladači eMMC. Pak tiskárna startuje pořád do slotu 2 a vrátit ji jde jen přes USB (`usbboot --swap-ota`, `tools/usbboot/README.md`).
 
-**Co se tím přepíše:** slot 2, kde je teď starší stock 1.3.3.x. Jeho kopie je v záloze v `~/Documents/K1-zaloha-2026-11-05`.
+**Co se tím přepíše:** slot 2, kde byl starší stock 1.3.3.x; jeho kopie je v záloze `~/Documents/K1-zaloha-2026-11-05`. Od 8. 11. 2026 je Datel OS v obou slotech (viz bod 11 u nasazení Kalica), takže `SLOT=` vybírá, který z nich se přepíše, a skript hlídá, že se nezapisuje do běžícího.
 
 ## První starty na tiskárně (7. 11. 2026)
 
@@ -115,9 +128,9 @@ Datel OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-F
 
 Ověřeno naživo přes SSH: Mainsail přes nginx, Moonraker se všemi komponentami, Klipper ve stavu `ready` s hlavním i tryskovým MCU přes ttyS7 a ttyS1 (přeložený C helper na MIPS funguje), čtení teplot. Chybí `/dev/fb0`, protože ovladač panelu K1 ještě není.
 
-## Větev `feat/kalico`: mainline Klipper (Kalico) a vlastní firmware MCU
+## Varianta Kalico: mainline Klipper a vlastní firmware MCU
 
-Volitelná sestava místo Creality Klipperu. Obraz vybírá proměnná `K1OS_KLIPPER` (`klipper-creality`, výchozí, nebo `kalico`); variantu s Kalicem sestaví `KAS_FILE=kas-creality-k1-kalico.yml ./build.sh`.
+Sestava místo Creality Klipperu, od 7. 11. 2026 v `main` a na autorově tiskárně výchozí. Obraz vybírá proměnná `K1OS_KLIPPER` (`klipper-creality`, výchozí, nebo `kalico`); variantu s Kalicem sestaví `KAS_FILE=kas-creality-k1-kalico.yml ./build.sh`.
 
 | Část | Zdroj | Poznámka |
 |---|---|---|
@@ -136,20 +149,38 @@ Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji na
 1. Ze stocku: `OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write`, `--switch`, restart.
 2. Při prvním startu `k1os-kalico-config` převede konfiguraci (záloha vedle v `config.creality-<datum>`), `k1os-mcu-update` nahraje nový firmware do tří MCU (asi 10 s, všechny najednou; jen po zapnutí ze studena, po pouhém restartu systému zůstává starý firmware a Kalico se k MCU nepřipojí), pak naběhne Kalico.
 3. Převod zároveň předvyplní blok SAVE_CONFIG hodnotami naměřenými na jedné K1 (`[load_cell_probe]` counts_per_gram 116.7 a tára, `[input_shaper]` X ei 42,2 Hz / Y mzv 53,2 Hz, pokud je stock ještě nemá), takže tiskárna homuje a meshuje hned po flashi. Vlastní kalibrace je doporučená, ne nutná: v Mainsailu `LOAD_CELL_DIAGNOSTIC`, potom `LOAD_CELL_CALIBRATE` se závažím asi 6 kg (`TARE`, `CALIBRATE GRAMS=6000`, `ACCEPT`, `SAVE_CONFIG`). Hodnoty jsou v bloku `#*#`, ne v `k1os_kalico.cfg`, protože Klipper odmítne SAVE_CONFIG, když je volba na obou místech.
-4. Input shaper: `SHAPER_CALIBRATE` na tiskárně nejde (výpočet v numpy potřebuje víc než 256 MB RAM, proces skončí OOM a Klipper na něj čeká napořád – pomůže `systemctl restart klipper`). Místo toho `TEST_RESONANCES AXIS=X OUTPUT=raw_data`, totéž pro Y, a na počítači `PRINTER=root@<ip> tools/shaper-fit.sh`; výsledek zapsat do bloku SAVE_CONFIG v `printer.cfg`.
-6. Kamera: 720p MJPEG z kamery má při 15 fps ~12 Mbit/s a na slabé Wi-Fi (K1 má jen 2,4 GHz, tady −77 dBm) zahltí linku – UI pak zadrhává. Výchozí je proto 8 fps (~6 Mbit/s) a Mainsail bere přímo stream (`mjpegstreamer`, ne adaptivní snímky). Přenastavit lze v `/usr/data/k1os/camera.env` (`CAMERA_RESOLUTION`, `CAMERA_FPS`) a v Mainsailu u kamery. Vestavěný prohlížeč OrcaSlicer (záložka Device, WebKit) MJPEG stream v obrázku nezobrazí („Error while connecting to …/webcam/?action=stream“), proto je v Moonrakeru i druhá kamera „K1 (snapshots)“ v režimu Adaptive MJPEG-Streamer (5 fps); v Orce ji vyber v rozbalovací nabídce panelu Webcam, Mainsail si volbu pamatuje pro každý prohlížeč zvlášť.
-7. Ventilátory K1: `fan0` ofuk výtisku (deska trysky), `fan1` komorový (zadní, s filtrem), `fan2` pomocný boční ofuk. Makra Creality mapují `M106 P<n>` 1:1, takže z Orcy je pomocný `P2` správně; odtah (`P3`) by ale makro Creality poslalo na `fan0`, proto ho převod konfigurace směruje na `fan1`. Posuvníky `output_pin` v Mainsailu posílají surovou PWM bez minima (Creality: fan1 od 50/255, fan2 od 180/255), takže pod tou hodnotou se ventilátor neroztočí.
-5. Sonda jede 3 mm/s (stejně opakovatelné jako 1 mm/s, mesh o 40 % rychlejší); `homing_speed` osy Z je stejná, aby G28 Z a mesh měly jednu referenci.
 4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
-8. Po teplém restartu ze stocku do Datel OS (cesta při flashování: `k1os-slot release`, reboot, zápis, `--switch`, reboot) zůstane hlavní MCU ve stavu shutdown a Kalico ohlásí „Can not update MCU 'mcu' config as it is shutdown“. Jeden `FIRMWARE_RESTART` to srovná (asi 20 s); při běžném startu Datel OS se to neděje.
-5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
-9. Oba sloty s Datel OS: až Datel OS běží ze slotu 2, zapíše `SLOT=1 OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write` a `--switch` totéž do slotu 1 (p5/p7) a stock tím z tiskárny zmizí. Předtím zálohovat p1–p5 a p7 (`dd if=/dev/mmcblk0pN` přes SSH, asi 330 MB, md5 porovnat s `md5sum /dev/mmcblk0pN` na tiskárně); návrat ke stocku je pak jen zápis těchto souborů zpět. Od té chvíle je A/B čistě pro Datel OS: nová verze jde do neběžícího slotu, zkušební boot se při selhání vrátí k předchozí verzi Datel OS. Ověřeno 8. 11. 2026: slot 1 nabootoval, Klipper byl ready bez `FIRMWARE_RESTART` (ten byl potřeba jen po stocku).
+5. Sonda jede 3 mm/s (stejně opakovatelné jako 1 mm/s, mesh o 40 % rychlejší); `homing_speed` osy Z je stejná, aby G28 Z a mesh měly jednu referenci.
+6. Input shaper: `SHAPER_CALIBRATE` na tiskárně nejde (výpočet v numpy potřebuje víc než 256 MB RAM, proces skončí OOM a Klipper na něj čeká napořád – pomůže `systemctl restart klipper`). Místo toho `TEST_RESONANCES AXIS=X OUTPUT=raw_data`, totéž pro Y, a na počítači `PRINTER=root@<ip> tools/shaper-fit.sh`; výsledek zapsat do bloku SAVE_CONFIG v `printer.cfg`.
+7. Ventilátory K1: `fan0` ofuk výtisku (deska trysky), `fan1` komorový (zadní, s filtrem), `fan2` pomocný boční ofuk. Makra Creality mapují `M106 P<n>` 1:1, takže z Orcy je pomocný `P2` správně; odtah (`P3`) by ale makro Creality poslalo na `fan0`, proto ho převod konfigurace směruje na `fan1`. Posuvníky `output_pin` v Mainsailu posílají surovou PWM bez minima (Creality: fan1 od 50/255, fan2 od 180/255), takže pod tou hodnotou se ventilátor neroztočí.
+8. Kamera: 720p MJPEG z kamery má při 15 fps ~12 Mbit/s a na slabé Wi-Fi (K1 má jen 2,4 GHz, tady −77 dBm) zahltí linku – UI pak zadrhává. Výchozí je proto 8 fps (~6 Mbit/s) a Mainsail bere přímo stream (`mjpegstreamer`, ne adaptivní snímky). Přenastavit lze v `/usr/data/k1os/camera.env` (`CAMERA_RESOLUTION`, `CAMERA_FPS`) a v Mainsailu u kamery. Vestavěný prohlížeč OrcaSlicer (záložka Device, WebKit) MJPEG stream v obrázku nezobrazí („Error while connecting to …/webcam/?action=stream“), proto je v Moonrakeru i druhá kamera „K1 (snapshots)“ v režimu Adaptive MJPEG-Streamer (5 fps); v Orce ji vyber v rozbalovací nabídce panelu Webcam, Mainsail si volbu pamatuje pro každý prohlížeč zvlášť.
+9. Po teplém restartu ze stocku do Datel OS (cesta při flashování: `k1os-slot release`, reboot, zápis, `--switch`, reboot) zůstane hlavní MCU ve stavu shutdown a Kalico ohlásí „Can not update MCU 'mcu' config as it is shutdown“. Jeden `FIRMWARE_RESTART` to srovná (asi 20 s); při běžném startu Datel OS se to neděje.
+10. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
+11. Oba sloty s Datel OS: až Datel OS běží ze slotu 2, zapíše `SLOT=1 OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write` a `--switch` totéž do slotu 1 (p5/p7) a stock tím z tiskárny zmizí. Předtím zálohovat p1–p5 a p7 (`dd if=/dev/mmcblk0pN` přes SSH, asi 330 MB, md5 porovnat s `md5sum /dev/mmcblk0pN` na tiskárně); návrat ke stocku je pak jen zápis těchto souborů zpět. Od té chvíle je A/B čistě pro Datel OS: nová verze jde do neběžícího slotu, zkušební boot se při selhání vrátí k předchozí verzi Datel OS. Ověřeno 8. 11. 2026: slot 1 nabootoval, Klipper byl ready bez `FIRMWARE_RESTART` (ten byl potřeba jen po stocku).
 
 ## Fáze
 
-0. **Záchrana:** připravit nahrávání přes USB (Ingenic cloner) a zálohu celé eMMC. Bez toho se nic nenahrává.
-1. **První boot:** jádro a minimální systém do neaktivního slotu. Cíl je konzole na ttyS2, SSH, Wi-Fi a připojené `/usr/data`.
-2. **Tisk:** Klipper, Moonraker a Mainsail, zatím se stock firmwarem MCU. Senzor prtouch jako rozšíření Klipperu podle zdrojů Creality.
-3. **Displej:** ovladač panelu K1 (inicializace ze stock modulů `lcd_*.ko`) a dotyková aplikace v LVGL, vycházející z GuppyScreen a NebulaScreen.
-4. **MCU:** otevřený Klipper pro hlavní desku GD32F303 (nahrání přes SWD a OpenOCD), pro hlavu GD32F303 a pro desku senzoru GD32E230.
-5. **Aktualizace:** vlastní A/B updater s automatickým návratem.
+0. **Záchrana:** záloha eMMC a nahrávání přes USB (Ingenic mask-ROM). Záloha hotová, USB boot popsaný v `tools/usbboot/README.md`, na desce S12 neověřený.
+1. **První boot:** jádro a minimální systém do neaktivního slotu, konzole, SSH, Wi-Fi, `/usr/data`. **Hotovo** (7. 11. 2026).
+2. **Tisk:** Klipper, Moonraker, Mainsail. **Hotovo**, obě varianty.
+3. **Displej:** ovladač panelu K1 a dotyková aplikace (GuppyScreen). **Chybí**, jediná část stock funkcí, kterou Datel OS zatím nenahrazuje.
+4. **MCU:** otevřený firmware všech tří MCU a flashování přes sériový bootloader Creality. **Hotovo** ve variantě Kalico.
+5. **Aktualizace:** A/B zápis do neběžícího slotu přes `tools/flash-slot2.sh` se zkušebním bootem **funguje**; vlastní updater na tiskárně (stažení vydání, zápis, přepnutí bez počítače) a otevřený bootloader s počítadlem pokusů (`feat/uboot`) zbývají.
+
+## Licence
+
+Vlastní kód, recepty, skripty, dokumentace a logo jsou pod licencí MIT (soubor [LICENSE](LICENSE)). Sestavený obraz obsahuje software třetích stran pod jeho vlastními licencemi; recepty ve vrstvě `meta-creality-k1` mají u každé komponenty pole `LICENSE` a přesný zdroj (`SRC_URI`, `SRCREV`).
+
+| Komponenta | Licence | Zdroj |
+|---|---|---|
+| Linux 6.6 (Ingenic X2000, NebulaOS) | GPL-2.0 | [NebulaOS-KE/NebulaOS-kernel](https://github.com/NebulaOS-KE/NebulaOS-kernel) |
+| Kalico (hostitel) a firmware MCU | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware) |
+| Klipper od Creality (varianta `klipper-creality`) | GPL-3.0 | [CrealityOfficial/K1_Series_Klipper](https://github.com/CrealityOfficial/K1_Series_Klipper) |
+| Moonraker, Mainsail | GPL-3.0 | upstream |
+| uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
+| GuppyScreen | GPL-3.0, MIT, BSD-3 | upstream |
+| Firmware Wi-Fi čipu `brcmfmac43430-sdio.bin` | licence linux-firmware (Cypress/Infineon, binární) | linux-firmware |
+| NVRAM Wi-Fi modulu AP6212A | bez uvedené licence, kalibrační data výrobce (recept `k1-wifi-nvram`, `LICENSE = "CLOSED"`) | Ingenic SDK / stock firmware K1 |
+| Yocto poky, meta-openembedded | MIT a licence jednotlivých balíků | upstream |
+
+Co v obrazu ani ve vydání není: stock bootloader (SPL, U-Boot), RTOS `zero.bin` a obsah oddílu `mmcblk0p9`. Zůstávají na tiskárně tak, jak je tam dal Creality. Z repozitáře pellcorp/creality (instalátor, fragmenty konfigurace, `mcu_util.py`), který licenci nemá, se nic nepřebírá.
