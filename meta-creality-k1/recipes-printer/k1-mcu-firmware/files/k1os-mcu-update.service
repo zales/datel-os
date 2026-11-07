@@ -1,0 +1,13 @@
+[Unit]
+Description=K1 OS: update the MCU firmware over the serial bootloader
+Requires=usr-data.mount
+After=usr-data.mount
+Before=klipper-mcu.service klipper.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/mcu-update
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

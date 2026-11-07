@@ -1,0 +1,38 @@
+#!/bin/sh
+# Bring the three K1 MCUs to the firmware shipped in /usr/share/klipper/fw/K1.
+# Runs before Klipper starts. Each MCU reports "<hw>-<fw>", e.g.
+# mcu0_120_G32-mcu0_021_000: the image for that hardware is the file whose
+# name starts with <hw>; it is flashed when its <fw> part differs.
+FW=/usr/share/klipper/fw/K1
+FLASH=/usr/libexec/k1os/mcu-flash
+LOG=/usr/data/k1os/log/mcu-update.log
+mkdir -p "$(dirname $LOG)"
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+
+rc=0
+for pair in /dev/ttyS7:mcu0 /dev/ttyS1:noz0 /dev/ttyS9:bed0; do
+    port=${pair%%:*}; board=${pair#*:}
+    [ -e "$port" ] || { log "$board: $port missing"; continue; }
+    ver=$($FLASH "$port" version 2>>"$LOG") || { log "$board: no version from $port"; rc=1; continue; }
+    hw=${ver%%-*}; fw=${ver#*-}
+    file=$(ls "$FW"/"$hw"-*.bin 2>/dev/null | head -n 1)
+    if [ -z "$file" ]; then
+        log "$board: $ver, no image for $hw, leaving it"
+        $FLASH "$port" start >/dev/null 2>&1
+        continue
+    fi
+    want=$(basename "$file" .bin); want=${want#*-}
+    if [ "$fw" = "$want" ]; then
+        log "$board: $ver up to date"
+        $FLASH "$port" start >/dev/null 2>&1
+        continue
+    fi
+    log "$board: $ver -> $want, flashing $(basename "$file")"
+    if $FLASH "$port" update "$file" >>"$LOG" 2>&1; then
+        log "$board: flashed"
+    else
+        log "$board: FLASH FAILED"
+        rc=1
+    fi
+done
+exit $rc
