@@ -66,6 +66,11 @@ do_install() {
 
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/klipper.service ${WORKDIR}/klipper-mcu.service ${D}${systemd_system_unitdir}/
+
+    # Creality's MCU firmware for this fork; k1os-mcu-update puts it back on
+    # the MCUs when another stack (Kalico) has flashed its own.
+    install -d ${D}${KLIPPER_DIR}/fw/K1
+    install -m 0644 ${S}/fw/K1/mcu0_120_G32-*.bin ${S}/fw/K1/noz0_120_G30-*.bin ${S}/fw/K1/bed0_110_G21-*.bin ${D}${KLIPPER_DIR}/fw/K1/
 }
 
 FILES:${PN} += "${KLIPPER_DIR} ${datadir}/klippy-env ${systemd_system_unitdir}"
@@ -74,6 +79,7 @@ INSANE_SKIP:${PN} += "already-stripped ldflags"
 
 RDEPENDS:${PN} += " \
     k1os-base \
+    k1os-mcu-update \
     python3-modules \
     python3-cffi \
     python3-greenlet \

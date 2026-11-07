@@ -7,17 +7,14 @@ HOMEPAGE = "https://github.com/pellcorp/k1-kalico-firmware"
 LICENSE = "GPL-3.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=1ebbd3e34237af26da5dc08a4e440464"
 
-SRC_URI = "git://github.com/pellcorp/k1-kalico-firmware.git;protocol=https;branch=aug2026 \
-           file://k1os-mcu-flash \
-           file://k1os-mcu-update \
-           file://k1os-mcu-update.service"
+SRC_URI = "git://github.com/pellcorp/k1-kalico-firmware.git;protocol=https;branch=aug2026"
 SRCREV = "674a0f98f7d3148a0211d424c726e2c7b90a6024"
 PV = "aug2026+git${SRCPV}"
 S = "${WORKDIR}/git"
 
 DEPENDS = "gcc-arm-none-eabi-native python3-native"
 # Firmware images for the MCUs, not host binaries.
-inherit allarch systemd
+inherit allarch
 INHIBIT_DEFAULT_DEPS = "1"
 
 K1_MCU_TARGETS = "mcu noz bed"
@@ -45,13 +42,10 @@ do_compile() {
 }
 
 do_install() {
-    install -d ${D}${datadir}/klipper/fw/K1 ${D}${libexecdir}/k1os ${D}${systemd_system_unitdir}
+    install -d ${D}${datadir}/klipper/fw/K1
     install -m 0644 ${B}/fw/*.bin ${D}${datadir}/klipper/fw/K1/
-    install -m 0755 ${WORKDIR}/k1os-mcu-flash ${D}${libexecdir}/k1os/mcu-flash
-    install -m 0755 ${WORKDIR}/k1os-mcu-update ${D}${libexecdir}/k1os/mcu-update
-    install -m 0644 ${WORKDIR}/k1os-mcu-update.service ${D}${systemd_system_unitdir}/
 }
 
-SYSTEMD_SERVICE:${PN} = "k1os-mcu-update.service"
-FILES:${PN} = "${datadir}/klipper/fw ${libexecdir}/k1os ${systemd_system_unitdir}"
-RDEPENDS:${PN} = "python3-core python3-pyserial"
+FILES:${PN} = "${datadir}/klipper/fw"
+RDEPENDS:${PN} = "k1os-mcu-update"
+RCONFLICTS:${PN} = "klipper-creality"

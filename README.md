@@ -126,7 +126,14 @@ Volitelná sestava místo Creality Klipperu. Obraz vybírá proměnná `K1OS_KLI
 
 Licence: Kalico i firmware jsou GPL-3.0. Repozitář pellcorp/creality (instalátor, fragmenty konfigurace, `mcu_util.py`) licenci nemá, proto se z něj nic nepřebírá; flasher i konfigurace jsou vlastní.
 
-Co zbývá před nasazením: ověřit převod konfigurace na kopii, nahrát firmware MCU (vratné, stock si svůj vrátí sám), kalibrovat tenzometry (`LOAD_CELL_CALIBRATE`, závaží asi 6 kg) a nastavit offset trysky.
+Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji načte bez chyby a zastaví se až na otevření sériového portu MCU. Aktualizaci MCU dělá balík `k1os-mcu-update` v obou variantách: varianta s Creality Klipperem nese obrazy MCU z repozitáře Creality (`004/003/004`), varianta s Kalicem vlastní (`021/026/121`), takže každá si při startu nahraje firmware, se kterým umí pracovat.
+
+**Nasazení varianty s Kalicem**
+1. Ze stocku: `PRINTER=root@<ip> tools/flash-slot2.sh --write` s obrazy z `out/kalico/` (skript čte `out/`, takže je nejdřív zkopíruj nebo uprav cestu), `--switch`, restart.
+2. Při prvním startu `k1os-kalico-config` převede konfiguraci (záloha vedle v `config.creality-<datum>`), `k1os-mcu-update` nahraje nový firmware do tří MCU (každé asi 10 s), pak naběhne Kalico.
+3. V Mainsailu: `LOAD_CELL_DIAGNOSTIC`, potom `LOAD_CELL_CALIBRATE` se závažím asi 6 kg (`TARE`, `CALIBRATE GRAMS=6000`, `ACCEPT`, `SAVE_CONFIG`).
+4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
+5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
 
 ## Fáze
 
