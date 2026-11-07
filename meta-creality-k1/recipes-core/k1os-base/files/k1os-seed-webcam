@@ -13,6 +13,11 @@ CAM = {
     "target_fps": 8, "target_fps_idle": 2, "aspect_ratio": "16:9",
     "rotation": 0, "flip_horizontal": False, "flip_vertical": False,
 }
+# Embedded web views (OrcaSlicer's Device tab, WebKit) cannot show the MJPEG
+# stream in an <img>; a second entry in snapshot-polling mode works there and
+# is picked per client in Mainsail's camera dropdown.
+CAMS = [CAM, dict(CAM, name="K1 (snapshots)", service="mjpegstreamer-adaptive",
+                  target_fps=5, target_fps_idle=1)]
 
 def req(path, payload=None):
     data = json.dumps(payload).encode() if payload is not None else None
@@ -27,10 +32,11 @@ except FileNotFoundError:
     pass
 for _ in range(60):
     try:
-        if any(w.get("name") == CAM["name"] for w in req("/server/webcams/list")["webcams"]):
-            break
-        req("/server/webcams/item", CAM)
-        print("k1os-seed-webcam: registered camera 'K1' in Moonraker")
+        have = {w.get("name") for w in req("/server/webcams/list")["webcams"]}
+        for cam in CAMS:
+            if cam["name"] not in have:
+                req("/server/webcams/item", cam)
+                print("k1os-seed-webcam: registered camera '%s' in Moonraker" % cam["name"])
         break
     except Exception as e:
         err = e; time.sleep(5)
