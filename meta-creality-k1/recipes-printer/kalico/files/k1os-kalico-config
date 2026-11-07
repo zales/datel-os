@@ -104,6 +104,13 @@ def main():
         (r"printer\.print_stats\.power_loss == 1", "False"),
         (r"^(\s*)BED_MESH_PROFILE LOAD=default_new\s*$", r"\1_KALICO_BED_MESH"),
         (r"^(\s*)BED_MESH_PROFILE LOAD=\"?default\"?\s*$", r"\1"),
+        # K1 fans: fan0 part cooling, fan1 chamber (rear), fan2 auxiliary (side).
+        # Orca sends the exhaust fan as M106/M107 P3, which Creality's macro
+        # folds onto fan0 (the part fan); route it to the chamber fan instead.
+        (r"^(\s*)\{% set tmp = params\.P\|int %\}\s*$",
+         r"\1{% set tmp = params.P|int %}\n\1{% if tmp == 3 %}{% set tmp = 1 %}{% endif %}"),
+        (r"params\.P\|int < fans", "(1 if params.P|int == 3 else params.P|int) < fans"),
+        (r"fan\{params\.P\|int\}", "fan{1 if params.P|int == 3 else params.P|int}"),
     ]
     sub_file(os.path.join(CFG, "gcode_macro.cfg"), [(a, b) for a, b in macro_pairs])
     sub_file(os.path.join(CFG, "sensorless.cfg"), [(a, b) for a, b in macro_pairs])
