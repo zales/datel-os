@@ -59,8 +59,11 @@ class Bootloader:
         return None
 
     def handshake(self, tries=5):
+        """A single 0x75 byte, answered by a single 0x75 (no crc on either)."""
         for _ in range(tries):
-            if self.request(0x75, 2, tries=1) == b"\x75":
+            self.ser.reset_input_buffer()
+            self.ser.write(b"\x75")
+            if self.ser.read(1) == b"\x75":
                 return True
             time.sleep(1)
         return False
@@ -74,14 +77,16 @@ class Bootloader:
         time.sleep(1)
 
     def connect(self):
-        """Reach the bootloader: either it is waiting after power-on, or the
-        application is running and is asked to reboot into it."""
+        """Reach the bootloader. It listens for about 15 s after power-on;
+        a running application reboots into it only when its firmware was
+        built with the serial bootloader side-channel (neither Creality's
+        nor the Kalico images enable it), so that path is a short attempt."""
         self.open(115200)
-        if self.handshake(tries=2):
+        if self.handshake(tries=3):
             return True
         self.enter_from_app()
         self.open(115200)
-        return self.handshake(tries=5)
+        return self.handshake(tries=2)
 
     def version(self):
         r = self.request(0x00, 26)

@@ -5,7 +5,9 @@
 # name starts with <hw>; it is flashed when its <fw> part differs.
 FW=/usr/share/klipper/fw/K1
 FLASH=/usr/libexec/k1os/mcu-flash
-LOG=/usr/data/k1os/log/mcu-update.log
+# /usr/data is not mounted this early; the log goes to /run and is copied
+# to /usr/data/k1os/log by k1os-datadir.service later.
+LOG=/run/k1os/mcu-update.log
 mkdir -p "$(dirname $LOG)"
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
@@ -13,7 +15,9 @@ rc=0
 for pair in /dev/ttyS7:mcu0 /dev/ttyS1:noz0 /dev/ttyS9:bed0; do
     port=${pair%%:*}; board=${pair#*:}
     [ -e "$port" ] || { log "$board: $port missing"; continue; }
-    ver=$($FLASH "$port" version 2>>"$LOG") || { log "$board: no version from $port"; rc=1; continue; }
+    # No handshake means the application is already running (a warm reboot,
+    # or the 15 s window after power-on has passed): nothing can be done now.
+    ver=$($FLASH "$port" version 2>>"$LOG") || { log "$board: $port did not answer the bootloader, skipped (power-cycle to update)"; continue; }
     hw=${ver%%-*}; fw=${ver#*-}
     file=$(ls "$FW"/"$hw"-*.bin 2>/dev/null | head -n 1)
     if [ -z "$file" ]; then
