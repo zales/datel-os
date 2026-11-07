@@ -1,0 +1,15 @@
+[Unit]
+Description=K1 OS: update the MCU firmware over the serial bootloader
+# The stock bootloaders only listen for about 15 s after power-on, so this
+# runs as soon as systemd does, before the rest of userspace. The serial
+# ports come from the built-in driver; the script waits briefly for them.
+DefaultDependencies=no
+Before=sysinit.target klipper-mcu.service klipper.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/mcu-update
+TimeoutStartSec=120
+
+[Install]
+WantedBy=sysinit.target

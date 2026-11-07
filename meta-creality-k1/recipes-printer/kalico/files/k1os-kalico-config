@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Turn the Creality K1 Klipper configuration into one Kalico can load.
+
+Runs once (marker file). The stock printer.cfg, gcode_macro.cfg and
+sensorless.cfg are edited in place after a backup; k1os_kalico.cfg is
+included for the load cell probe, bed mesh and shims.
+"""
+import os, re, shutil, sys
+
+CFG = os.environ.get("K1OS_CONFIG_DIR", "/usr/data/k1os/printer_data/config")
+MARK = os.path.join(CFG, ".k1os-kalico")
+FRAG = os.environ.get("K1OS_KALICO_FRAGMENT", "/etc/k1os/k1os_kalico.cfg")
+
+DROP_SECTIONS = {"prtouch_v2", "bl24c16f", "mcu rpi", "mcu leveling_mcu",
+                 "custom_macro", "fan_feedback", "bed_mesh"}
+DROP_SAVE_CONFIG_SECTIONS = ("bed_mesh ", "prtouch")
+
+
+def sections(text):
+    """Yield (name or None, lines) blocks, keeping order and comments."""
+    name, buf = None, []
+    for line in text.splitlines(keepends=True):
+        m = re.match(r"\[([^\]]+)\]", line)
+        if m and not line.startswith("#*#"):
+            yield name, buf
+            name, buf = m.group(1).strip(), [line]
+        else:
+            buf.append(line)
+    yield name, buf
+
+
+def rewrite_printer_cfg(path):
+    text = open(path).read()
+    main, save = text, ""
+    if "#*# <---------------------- SAVE_CONFIG ---------------------->" in text:
+        i = text.index("#*# <---------------------- SAVE_CONFIG ---------------------->")
+        main, save = text[:i], text[i:]
+    out = []
+    for name, lines in sections(main):
+        if name in DROP_SECTIONS:
+            continue
+        if name == "stepper_z":
+            new = []
+            for l in lines:
+                k = l.split(":")[0].strip()
+                if k == "endstop_pin":
+                    l = "endstop_pin: probe:z_virtual_endstop\n"
+                elif k == "position_endstop":
+                    continue
+                new.append(l)
+            new.insert(1, "homing_retract_dist: 0\nhoming_speed: 2.0\n")
+            lines = new
+        if name == "printer":
+            lines = [l for l in lines if l.split(":")[0].strip()
+                     not in ("square_corner_max_velocity", "max_accel_to_decel")]
+        out.extend(lines)
+    body = "".join(out)
+    if "[include k1os_kalico.cfg]" not in body:
+        body = "[include k1os_kalico.cfg]\n" + body
+    # SAVE_CONFIG: keep PID results, drop meshes and probe data made by prtouch
+    keep, skip = [], False
+    for l in save.splitlines(keepends=True):
+        m = re.match(r"#\*# \[([^\]]+)\]", l)
+        if m:
+            skip = m.group(1).startswith(DROP_SAVE_CONFIG_SECTIONS)
+        if not skip:
+            keep.append(l)
+    open(path, "w").write(body + "".join(keep))
+
+
+def drop_sections_in(path):
+    """Remove Creality-only sections from an included config file."""
+    text = open(path).read()
+    out = []
+    for name, lines in sections(text):
+        if name in DROP_SECTIONS:
+            continue
+        out.extend(lines)
+    open(path, "w").write("".join(out))
+
+
+def sub_file(path, pairs):
+    if not os.path.exists(path):
+        return
+    s = open(path).read()
+    for a, b in pairs:
+        s = re.sub(a, b, s, flags=re.M)
+    open(path, "w").write(s)
+
+
+def main():
+    if os.path.exists(MARK):
+        return 0
+    if not os.path.exists(os.path.join(CFG, "printer.cfg")):
+        print("k1os-kalico-config: no printer.cfg yet", file=sys.stderr)
+        return 1
+    bak = CFG + ".creality-" + __import__("time").strftime("%Y%m%d-%H%M%S")
+    shutil.copytree(CFG, bak)
+    rewrite_printer_cfg(os.path.join(CFG, "printer.cfg"))
+    shutil.copy(FRAG, os.path.join(CFG, "k1os_kalico.cfg"))
+    macro_pairs = [
+        (r"printer\.custom_macro\.", "printer['gcode_macro _K1OS_PARAMS']."),
+        (r"printer\.print_stats\.z_pos\|float", "printer.toolhead.position.z|float"),
+        (r"printer\.print_stats\.power_loss == 1", "False"),
+        (r"^(\s*)BED_MESH_PROFILE LOAD=default_new\s*$", r"\1_K1OS_BED_MESH"),
+        (r"^(\s*)BED_MESH_PROFILE LOAD=\"?default\"?\s*$", r"\1"),
+    ]
+    sub_file(os.path.join(CFG, "gcode_macro.cfg"), [(a, b) for a, b in macro_pairs])
+    sub_file(os.path.join(CFG, "sensorless.cfg"), [(a, b) for a, b in macro_pairs])
+    for f in os.listdir(CFG):
+        if f.endswith(".cfg") and f not in ("printer.cfg", "k1os_kalico.cfg") and not f.startswith("printer-"):
+            drop_sections_in(os.path.join(CFG, f))
+            sub_file(os.path.join(CFG, f), [(r"printer\.custom_macro\.", "printer['gcode_macro _K1OS_PARAMS'].")])
+    open(MARK, "w").write(bak + "\n")
+    print("k1os-kalico-config: converted, backup in " + bak)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -66,3 +66,8 @@ mkdir -p $D/ssh && chmod 700 $D/ssh
 [ -e $D/ssh/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -N "" -f $D/ssh/ssh_host_ed25519_key
 [ -e $D/ssh/ssh_host_ecdsa_key ] || ssh-keygen -q -t ecdsa -N "" -f $D/ssh/ssh_host_ecdsa_key
 touch $D/ssh/authorized_keys && chmod 600 $D/ssh/authorized_keys
+
+# Keep the early MCU update log from this boot.
+if [ -e /run/k1os/mcu-update.log ]; then
+    mkdir -p $D/log && cat /run/k1os/mcu-update.log >> $D/log/mcu-update.log
+fi

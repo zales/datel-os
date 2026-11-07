@@ -111,6 +111,30 @@ K1 OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-Fi s
 
 Ověřeno naživo přes SSH: Mainsail přes nginx, Moonraker se všemi komponentami, Klipper ve stavu `ready` s hlavním i tryskovým MCU přes ttyS7 a ttyS1 (přeložený C helper na MIPS funguje), čtení teplot. Chybí `/dev/fb0`, protože ovladač panelu K1 ještě není.
 
+## Větev `feat/kalico`: mainline Klipper (Kalico) a vlastní firmware MCU
+
+Volitelná sestava místo Creality Klipperu. Obraz vybírá proměnná `K1OS_KLIPPER` (`klipper-creality`, výchozí, nebo `kalico`); variantu s Kalicem sestaví `KAS_FILE=kas-creality-k1-kalico.yml ./build.sh`.
+
+| Část | Zdroj | Poznámka |
+|---|---|---|
+| Hostitel | [pellcorp/kalico](https://github.com/pellcorp/kalico), větev `aug2026` | Kalico s doplňky pro K1: sonda z tenzometrů (`load_cell_probe`, `hx711s`), vstup do bootloaderu MCU |
+| Firmware MCU | [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware), větev `aug2026` | port GD32 od Creality, konfigurace `.config.mcu/.noz/.bed`; překlad toolchainem `gcc-arm-none-eabi` z meta-arm. Vzniknou `mcu0_120_G32-mcu0_021_000.bin`, `noz0_120_G30-noz0_026_000.bin`, `bed0_110_G21-bed0_121_000.bin` s hlavičkou pro bootloader Creality (verze na 0x200, CRC16, délka). |
+| Flashování | vlastní `k1os-mcu-flash` | sériový bootloader Creality (ověřeno na tiskárně): 115200 baud, bootloader čeká jen asi 15 s po zapnutí; handshake je jeden bajt 0x75 a bootloader ho přijme jen jednou, pak už zůstává spuštěný bez časového limitu a bere jen rámce `<příkaz><crc>` (verze, velikost sektoru, zápis po sektorech, start aplikace). Kdo se s ním domluví, musí i poslat start, jinak MCU aplikaci nikdy nespustí. Běžící Klipper se do bootloaderu poslat nedá (firmware Creality ani Kalico nemá zapnutý `SERIAL_BOOTLOADER_SIDECHANNEL`), takže aktualizace proběhne jen po vypnutí a zapnutí tiskárny. `k1os-mcu-update.service` běží hned po startu systemd, obsluhuje všechny tři porty najednou (každý vlastním procesem, příkaz `sync`: verze, porovnání, případný zápis, start) a MCU, které už běží aplikaci, přeskočí. Stock si při návratu MCU přeflashuje zpět sám. |
+| Konfigurace | `k1os-kalico-config` | jednorázově převede stock konfiguraci: odstraní `prtouch_v2`, `bl24c16f`, `custom_macro`, `fan_feedback`, přepne Z na `probe:z_virtual_endstop`, přidá `k1os_kalico.cfg` se sondou, sítí a náhradami příkazů Creality (`CX_PRINT_LEVELING_CALIBRATION`, `CX_PRINT_DRAW_ONE_LINE`, `PRTOUCH_READY`, …). Záloha původní konfigurace zůstane vedle. |
+
+Čipy MCU: hlavní deska GD32F303xE (120 MHz, `/dev/ttyS7`), tryska GD32F303xB (120 MHz, `/dev/ttyS1`), nivelace GD32E230x8 (72 MHz, `/dev/ttyS9`); všechny 230400 baud, aplikace od 0x8003000.
+
+Licence: Kalico i firmware jsou GPL-3.0. Repozitář pellcorp/creality (instalátor, fragmenty konfigurace, `mcu_util.py`) licenci nemá, proto se z něj nic nepřebírá; flasher i konfigurace jsou vlastní.
+
+Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji načte bez chyby a zastaví se až na otevření sériového portu MCU. Aktualizaci MCU dělá balík `k1os-mcu-update` v obou variantách: varianta s Creality Klipperem nese obrazy MCU z repozitáře Creality (`004/003/004`), varianta s Kalicem vlastní (`021/026/121`), takže každá si při startu nahraje firmware, se kterým umí pracovat.
+
+**Nasazení varianty s Kalicem**
+1. Ze stocku: `PRINTER=root@<ip> tools/flash-slot2.sh --write` s obrazy z `out/kalico/` (skript čte `out/`, takže je nejdřív zkopíruj nebo uprav cestu), `--switch`, restart.
+2. Při prvním startu `k1os-kalico-config` převede konfiguraci (záloha vedle v `config.creality-<datum>`), `k1os-mcu-update` nahraje nový firmware do tří MCU (asi 10 s, všechny najednou; jen po zapnutí ze studena, po pouhém restartu systému zůstává starý firmware a Kalico se k MCU nepřipojí), pak naběhne Kalico.
+3. V Mainsailu: `LOAD_CELL_DIAGNOSTIC`, potom `LOAD_CELL_CALIBRATE` se závažím asi 6 kg (`TARE`, `CALIBRATE GRAMS=6000`, `ACCEPT`, `SAVE_CONFIG`).
+4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
+5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
+
 ## Fáze
 
 0. **Záchrana:** připravit nahrávání přes USB (Ingenic cloner) a zálohu celé eMMC. Bez toho se nic nenahrává.

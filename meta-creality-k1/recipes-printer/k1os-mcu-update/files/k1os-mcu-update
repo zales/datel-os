@@ -1,0 +1,43 @@
+#!/bin/sh
+# Bring the three K1 MCUs to the firmware shipped in /usr/share/klipper/fw/K1.
+# Runs before Klipper starts. Each MCU reports "<hw>-<fw>", e.g.
+# mcu0_120_G32-mcu0_004_000: the image for that hardware is the file whose
+# name starts with <hw>; it is flashed when its <fw> part differs.
+#
+# The bootloaders listen only for about 15 s after power-on, so the three
+# ports are handled at the same time, each by its own mcu-flash process.
+FW=/usr/share/klipper/fw/K1
+FLASH=/usr/libexec/k1os/mcu-flash
+# /usr/data is not mounted this early; the log goes to /run and is copied
+# to /usr/data/k1os/log by k1os-datadir.service later.
+RUN=/run/k1os
+LOG=$RUN/mcu-update.log
+mkdir -p "$RUN"
+log() { echo "$(date '+%T') $*" | tee -a "$LOG"; }
+
+one() {
+    port=$1; board=$2
+    n=0
+    while [ ! -e "$port" ] && [ $n -lt 30 ]; do sleep 0.1; n=$((n + 1)); done
+    if [ ! -e "$port" ]; then
+        log "$board: $port missing"; echo 1 > "$RUN/mcu-update.$board"; return
+    fi
+    out=$($FLASH "$port" sync "$FW" 2>&1); rc=$?
+    echo "$out" | while IFS= read -r line; do log "$board: ${line#k1os-mcu-flash: }"; done
+    if [ $rc -eq 3 ]; then
+        log "$board: skipped (power-cycle the printer to update it)"; rc=0
+    fi
+    echo $rc > "$RUN/mcu-update.$board"
+}
+
+rm -f "$RUN"/mcu-update.mcu0 "$RUN"/mcu-update.noz0 "$RUN"/mcu-update.bed0
+one /dev/ttyS7 mcu0 &
+one /dev/ttyS1 noz0 &
+one /dev/ttyS9 bed0 &
+wait
+
+rc=0
+for b in mcu0 noz0 bed0; do
+    [ "$(cat "$RUN/mcu-update.$b" 2>/dev/null)" = 0 ] || rc=1
+done
+exit $rc

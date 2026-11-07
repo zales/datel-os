@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""Talk to the serial bootloader of the Creality K1 MCUs (GD32 boards).
+
+Written from the observed protocol (also used by Creality's own updater):
+  * the bootloader (115200 baud) listens for about 15 s after power-on; a
+    running Klipper firmware (230400 baud) cannot be asked to re-enter it
+    (Creality's and the Kalico images are built without that side-channel);
+  * the handshake is a single 0x75 byte answered by a single 0x75, accepted
+    once: from then on the bootloader stays up for good (no more timeout)
+    and takes only <command><crc> frames, where crc = (sum of the bytes
+    mod 256) xor 0xff, and answers <data...><crc>;
+  * commands: 0x00 version (25 bytes: "<hw>-<fw>", e.g.
+    mcu0_120_G32-mcu0_021_000), 0x03 sector size in KiB, 0x01 update (then
+    the 4-byte LE size, then sector-sized chunks, each followed by its crc;
+    replies 0x75 chunk ok, 0x20 done, 0x21 flash error, 0x1f bad crc),
+    0x02 start the application.
+  So whoever handshakes must also send "start", or the MCU never runs its
+  application: every command below ends by starting it.
+
+Usage:
+  k1os-mcu-flash PORT sync DIR          bring PORT to the image in DIR whose
+                                        name starts with the MCU's <hw>, then
+                                        start the application
+  k1os-mcu-flash PORT version           print the version string and start
+  k1os-mcu-flash PORT update FILE.bin   flash FILE and start it
+  k1os-mcu-flash PORT start             start the application
+Exit codes: 0 done, 1 protocol or I/O failure, 3 no bootloader on PORT (the
+application is already running; power-cycle the printer to get one).
+"""
+import glob, os, sys, time
+import serial
+
+NO_BOOTLOADER = 3
+WAIT = 20.0  # seconds spent looking for the bootloader before giving up
+
+
+def crc(data):
+    return (sum(data) & 0xff) ^ 0xff
+
+
+def log(msg):
+    print("k1os-mcu-flash: " + msg, flush=True)
+
+
+class Bootloader:
+    def __init__(self, port):
+        self.port = port
+        self.ser = None
+
+    def open(self, baud):
+        self.close()
+        self.ser = serial.Serial(self.port, baudrate=baud, timeout=2.0)
+
+    def close(self):
+        if self.ser is not None:
+            self.ser.close()
+            self.ser = None
+
+    def request(self, cmd, reply_len, tries=3):
+        for _ in range(tries):
+            self.ser.reset_input_buffer()
+            self.ser.write(bytes([cmd, crc(bytes([cmd]))]))
+            r = self.ser.read(reply_len)
+            if len(r) == reply_len and r[-1] == crc(r[:-1]):
+                return r[:-1]
+            time.sleep(0.2)
+        return None
+
+    def connect(self, wait=WAIT):
+        """Find the bootloader: a fresh one answers the handshake, one that
+        was already handshaked (by an earlier process) answers a version
+        request instead. A running application answers neither."""
+        self.open(115200)
+        deadline = time.monotonic() + wait
+        while True:
+            self.ser.reset_input_buffer()
+            self.ser.write(b"\x75")
+            if self.ser.read(1) == b"\x75":
+                return True
+            if self.request(0x00, 26, tries=1) is not None:
+                return True
+            if time.monotonic() > deadline:
+                return False
+
+    def version(self):
+        r = self.request(0x00, 26)
+        if r is None:
+            return None
+        return r.rstrip(b"\x00").decode("ascii", "replace")
+
+    def sector_kib(self):
+        r = self.request(0x03, 2)
+        return r[0] if r else None
+
+    def start_app(self):
+        for _ in range(3):
+            if self.request(0x02, 2) == b"\x75":
+                return True
+            time.sleep(0.5)
+        return False
+
+    def update(self, path):
+        data = open(path, "rb").read()
+        kib = self.sector_kib()
+        if not kib:
+            log("no sector size")
+            return False
+        chunk = kib * 1024
+        if self.request(0x01, 2) != b"\x75":
+            log("update request refused")
+            return False
+        size = len(data).to_bytes(4, "little")
+        self.ser.write(size + bytes([crc(size)]))
+        r = self.ser.read(2)
+        if len(r) != 2 or r[0] != 0x75 or r[1] != crc(r[:1]):
+            log("size refused: %s" % r.hex())
+            return False
+        sent = 0
+        while sent < len(data):
+            part = data[sent:sent + chunk]
+            self.ser.write(part + bytes([crc(part)]))
+            r = self.ser.read(2)
+            if len(r) != 2 or r[1] != crc(r[:1]):
+                log("no reply after %d bytes" % sent)
+                return False
+            sent += len(part)
+            if r[0] == 0x75:
+                continue
+            if r[0] == 0x20:
+                break
+            log({0x21: "flash write error", 0x1f: "bad crc"}.get(r[0], "status 0x%02x" % r[0]))
+            return False
+        log("flashed %d bytes" % sent)
+        return True
+
+
+def firmware_header(path):
+    """The 12-byte version string at offset 0x200, e.g. mcu0_021_000."""
+    with open(path, "rb") as f:
+        f.seek(0x200)
+        return f.read(12).rstrip(b"\x00").decode("ascii", "replace")
+
+
+def valid_header(hdr):
+    return hdr[:4] in ("mcu0", "noz0", "bed0") and hdr[4] == "_" and hdr[8] == "_"
+
+
+def flash(bl, path, cur):
+    hdr = firmware_header(path)
+    if not valid_header(hdr):
+        log("%s has no Creality firmware header (%r)" % (path, hdr))
+        return False
+    if cur and cur[:4] != hdr[:4]:
+        log("board type mismatch (%s vs %s), refusing" % (cur, hdr))
+        return False
+    log("%s: %s -> %s, flashing %s" % (bl.port, cur, hdr, os.path.basename(path)))
+    return bl.update(path)
+
+
+def finish(bl, ok):
+    started = bl.start_app()
+    log("%s: start application %s" % (bl.port, "ok" if started else "FAILED"))
+    return 0 if ok and started else 1
+
+
+def main(argv):
+    if len(argv) < 3:
+        print(__doc__)
+        return 2
+    port, cmd = argv[1], argv[2]
+    bl = Bootloader(port)
+    try:
+        if not bl.connect():
+            log("%s: no bootloader (the application is running)" % port)
+            return NO_BOOTLOADER
+        if cmd == "start":
+            return finish(bl, True)
+        cur = bl.version()
+        if cmd == "version":
+            if cur:
+                print(cur)
+            return finish(bl, cur is not None)
+        if cmd == "update":
+            return finish(bl, flash(bl, argv[3], cur))
+        if cmd == "sync":
+            if cur is None:
+                log("%s: no version answer" % port)
+                return finish(bl, False)
+            hw, _, fw = cur.partition("-")
+            files = sorted(glob.glob(os.path.join(argv[3], hw + "-*.bin")))
+            if not files:
+                log("%s: %s, no image for %s, leaving it" % (port, cur, hw))
+                return finish(bl, True)
+            want = firmware_header(files[0])
+            if fw == want:
+                log("%s: %s up to date" % (port, cur))
+                return finish(bl, True)
+            return finish(bl, flash(bl, files[0], cur))
+        print(__doc__)
+        return 2
+    finally:
+        bl.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

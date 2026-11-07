@@ -1,0 +1,9 @@
+# K1 OS with Kalico and our own MCU firmware instead of Creality's Klipper.
+header:
+  version: 14
+  includes:
+    - kas-creality-k1.yml
+
+local_conf_header:
+  kalico: |
+    K1OS_KLIPPER = "kalico"

@@ -16,6 +16,12 @@ repos:
       meta:
       meta-poky:
 
+  meta-arm:
+    url: https://git.yoctoproject.org/meta-arm
+    branch: scarthgap
+    layers:
+      meta-arm-toolchain:
+
   meta-openembedded:
     url: https://github.com/openembedded/meta-openembedded.git
     branch: scarthgap

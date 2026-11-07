@@ -18,7 +18,11 @@ IMAGE_INSTALL = " \
 
 # Printing stack: Creality's Klipper (fits the stock MCU firmware), Moonraker,
 # Mainsail on nginx and Guppy Screen on the touch display.
-IMAGE_INSTALL += "klipper-creality moonraker mainsail guppyscreen nginx ustreamer"
+# K1OS_KLIPPER picks the printing stack: "klipper-creality" (Creality's fork
+# with the stock MCU firmware) or "kalico" (pellcorp's Kalico with our own
+# MCU firmware and the load cell probe).
+K1OS_KLIPPER ?= "klipper-creality"
+IMAGE_INSTALL += "${K1OS_KLIPPER} moonraker mainsail guppyscreen nginx ustreamer"
 
 IMAGE_ROOTFS_EXTRA_SPACE = "0"
 
