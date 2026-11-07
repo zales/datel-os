@@ -143,6 +143,7 @@ Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji na
 4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
 8. Po teplém restartu ze stocku do Datel OS (cesta při flashování: `k1os-slot release`, reboot, zápis, `--switch`, reboot) zůstane hlavní MCU ve stavu shutdown a Kalico ohlásí „Can not update MCU 'mcu' config as it is shutdown“. Jeden `FIRMWARE_RESTART` to srovná (asi 20 s); při běžném startu Datel OS se to neděje.
 5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
+9. Oba sloty s Datel OS: až Datel OS běží ze slotu 2, zapíše `SLOT=1 OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write` a `--switch` totéž do slotu 1 (p5/p7) a stock tím z tiskárny zmizí. Předtím zálohovat p1–p5 a p7 (`dd if=/dev/mmcblk0pN` přes SSH, asi 330 MB, md5 porovnat s `md5sum /dev/mmcblk0pN` na tiskárně); návrat ke stocku je pak jen zápis těchto souborů zpět. Od té chvíle je A/B čistě pro Datel OS: nová verze jde do neběžícího slotu, zkušební boot se při selhání vrátí k předchozí verzi Datel OS. Ověřeno 8. 11. 2026: slot 1 nabootoval, Klipper byl ready bez `FIRMWARE_RESTART` (ten byl potřeba jen po stocku).
 
 ## Fáze
 
