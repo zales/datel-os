@@ -111,6 +111,23 @@ K1 OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-Fi s
 
 Ověřeno naživo přes SSH: Mainsail přes nginx, Moonraker se všemi komponentami, Klipper ve stavu `ready` s hlavním i tryskovým MCU přes ttyS7 a ttyS1 (přeložený C helper na MIPS funguje), čtení teplot. Chybí `/dev/fb0`, protože ovladač panelu K1 ještě není.
 
+## Větev `feat/kalico`: mainline Klipper (Kalico) a vlastní firmware MCU
+
+Volitelná sestava místo Creality Klipperu. Obraz vybírá proměnná `K1OS_KLIPPER` (`klipper-creality`, výchozí, nebo `kalico`); variantu s Kalicem sestaví `KAS_FILE=kas-creality-k1-kalico.yml ./build.sh`.
+
+| Část | Zdroj | Poznámka |
+|---|---|---|
+| Hostitel | [pellcorp/kalico](https://github.com/pellcorp/kalico), větev `aug2026` | Kalico s doplňky pro K1: sonda z tenzometrů (`load_cell_probe`, `hx711s`), vstup do bootloaderu MCU |
+| Firmware MCU | [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware), větev `aug2026` | port GD32 od Creality, konfigurace `.config.mcu/.noz/.bed`; překlad toolchainem `gcc-arm-none-eabi` z meta-arm. Vzniknou `mcu0_120_G32-mcu0_021_000.bin`, `noz0_120_G30-noz0_026_000.bin`, `bed0_110_G21-bed0_121_000.bin` s hlavičkou pro bootloader Creality (verze na 0x200, CRC16, délka). |
+| Flashování | vlastní `k1os-mcu-flash` | sériový bootloader Creality: 115200 baud, handshake 0x75, verze, velikost sektoru, zápis po sektorech s CRC, start aplikace; běžící Klipper se do bootloaderu posílá řetězcem na 230400 baud. `k1os-mcu-update.service` při startu porovná verze a případně přeflashuje. Stock si při návratu MCU přeflashuje zpět sám. |
+| Konfigurace | `k1os-kalico-config` | jednorázově převede stock konfiguraci: odstraní `prtouch_v2`, `bl24c16f`, `custom_macro`, `fan_feedback`, přepne Z na `probe:z_virtual_endstop`, přidá `k1os_kalico.cfg` se sondou, sítí a náhradami příkazů Creality (`CX_PRINT_LEVELING_CALIBRATION`, `CX_PRINT_DRAW_ONE_LINE`, `PRTOUCH_READY`, …). Záloha původní konfigurace zůstane vedle. |
+
+Čipy MCU: hlavní deska GD32F303xE (120 MHz, `/dev/ttyS7`), tryska GD32F303xB (120 MHz, `/dev/ttyS1`), nivelace GD32E230x8 (72 MHz, `/dev/ttyS9`); všechny 230400 baud, aplikace od 0x8003000.
+
+Licence: Kalico i firmware jsou GPL-3.0. Repozitář pellcorp/creality (instalátor, fragmenty konfigurace, `mcu_util.py`) licenci nemá, proto se z něj nic nepřebírá; flasher i konfigurace jsou vlastní.
+
+Co zbývá před nasazením: ověřit převod konfigurace na kopii, nahrát firmware MCU (vratné, stock si svůj vrátí sám), kalibrovat tenzometry (`LOAD_CELL_CALIBRATE`, závaží asi 6 kg) a nastavit offset trysky.
+
 ## Fáze
 
 0. **Záchrana:** připravit nahrávání přes USB (Ingenic cloner) a zálohu celé eMMC. Bez toho se nic nenahrává.
