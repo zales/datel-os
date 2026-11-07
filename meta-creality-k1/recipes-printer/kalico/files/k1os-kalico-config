@@ -68,6 +68,17 @@ def rewrite_printer_cfg(path):
     open(path, "w").write(body + "".join(keep))
 
 
+def drop_sections_in(path):
+    """Remove Creality-only sections from an included config file."""
+    text = open(path).read()
+    out = []
+    for name, lines in sections(text):
+        if name in DROP_SECTIONS:
+            continue
+        out.extend(lines)
+    open(path, "w").write("".join(out))
+
+
 def sub_file(path, pairs):
     if not os.path.exists(path):
         return
@@ -97,7 +108,8 @@ def main():
     sub_file(os.path.join(CFG, "gcode_macro.cfg"), [(a, b) for a, b in macro_pairs])
     sub_file(os.path.join(CFG, "sensorless.cfg"), [(a, b) for a, b in macro_pairs])
     for f in os.listdir(CFG):
-        if f.endswith(".cfg") and f not in ("printer.cfg", "k1os_kalico.cfg"):
+        if f.endswith(".cfg") and f not in ("printer.cfg", "k1os_kalico.cfg") and not f.startswith("printer-"):
+            drop_sections_in(os.path.join(CFG, f))
             sub_file(os.path.join(CFG, f), [(r"printer\.custom_macro\.", "printer['gcode_macro _K1OS_PARAMS'].")])
     open(MARK, "w").write(bak + "\n")
     print("k1os-kalico-config: converted, backup in " + bak)
