@@ -3,5 +3,5 @@
 # --encoder=HW passes it through unchanged and the CPU stays idle.
 dev=$(/usr/libexec/k1os/camera-device) || exit 1
 exec /usr/bin/ustreamer --device="$dev" --format=MJPEG --encoder=HW \
-    --resolution="${CAMERA_RESOLUTION:-1280x720}" --desired-fps="${CAMERA_FPS:-15}" \
+    --resolution="${CAMERA_RESOLUTION:-1280x720}" --desired-fps="${CAMERA_FPS:-8}" \
     --drop-same-frames=15 --host=127.0.0.1 --port=8080 --tcp-nodelay --allow-origin='*'
