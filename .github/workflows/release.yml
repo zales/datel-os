@@ -1,0 +1,97 @@
+# Datel OS firmware release. A tag vX.Y.Z builds both image variants on the
+# self-hosted runner (the Mac with Docker Desktop and the k1yocto-work volume,
+# label "k1-yocto") and publishes them as a GitHub Release from a GitHub-hosted
+# runner. The steps are tools/release.sh; docs/RELEASE.md has the runner setup,
+# the manual fallback and the install steps for the printer.
+#
+# The release carries the kernel, the root filesystem and the OTA package only.
+# tools/release.sh check refuses anything else, bootloader and RTOS included.
+name: Release firmware
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish again (vX.Y.Z)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build images on the self-hosted runner
+    runs-on: [self-hosted, k1-yocto]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Docker Desktop and Homebrew on PATH
+        run: |
+          echo /usr/local/bin >> "$GITHUB_PATH"
+          echo /opt/homebrew/bin >> "$GITHUB_PATH"
+
+      - name: Tag matches DISTRO_VERSION
+        run: tools/release.sh version
+
+      - name: Build klipper-creality and kalico, collect the images
+        run: tools/release.sh build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ env.TAG }}
+          path: release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    name: Publish the GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-${{ env.TAG }}
+          path: release
+
+      - name: 7-Zip for the look inside the OTA package
+        run: command -v 7zz || command -v 7z || sudo apt-get install -y --no-install-recommends 7zip
+
+      - name: Check the files
+        run: tools/release.sh check
+
+      - name: Release notes from the commits since the previous tag
+        run: tools/release.sh notes | tee "$RUNNER_TEMP/notes.md"
+
+      - name: Create or refresh the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--title "Datel OS $TAG" --notes-file "$RUNNER_TEMP/notes.md")
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" "${flags[@]}"
+          else
+            gh release create "$TAG" release/* --verify-tag "${flags[@]}"
+          fi

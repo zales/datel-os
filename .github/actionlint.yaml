@@ -1,0 +1,4 @@
+# Labels of the self-hosted runner that builds the firmware (docs/RELEASE.md).
+self-hosted-runner:
+  labels:
+    - k1-yocto

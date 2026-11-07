@@ -1,5 +1,6 @@
 # Build outputs (60 MB images)
 out/
+release/
 # kas/bitbake scratch if ever run locally
 build/
 *.log
