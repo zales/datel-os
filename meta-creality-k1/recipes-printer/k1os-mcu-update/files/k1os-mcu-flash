@@ -2,28 +2,36 @@
 """Talk to the serial bootloader of the Creality K1 MCUs (GD32 boards).
 
 Written from the observed protocol (also used by Creality's own updater):
-  * the running Klipper firmware (230400 baud) reboots into the bootloader
-    when it receives the string " \\x1c Request Serial Bootloader!! ~";
-  * the bootloader (115200 baud) waits about 15 s after power-on for a
-    handshake, then starts the application if its CRC16 is good;
-  * every request is <command><crc>, every reply <data...><crc>, where
-    crc = (sum of bytes mod 256) xor 0xff;
-  * commands: 0x75 handshake (ack 0x75), 0x00 version (25 bytes:
-    "<hw>-<fw>", e.g. mcu0_120_G32-mcu0_021_000), 0x03 sector size in KiB,
-    0x01 update (then 4-byte LE size, then size-KiB chunks, each followed
-    by its crc; replies 0x75 chunk ok, 0x20 done, 0x21 flash error,
-    0x1f bad crc), 0x02 start the application.
+  * the bootloader (115200 baud) listens for about 15 s after power-on; a
+    running Klipper firmware (230400 baud) cannot be asked to re-enter it
+    (Creality's and the Kalico images are built without that side-channel);
+  * the handshake is a single 0x75 byte answered by a single 0x75, accepted
+    once: from then on the bootloader stays up for good (no more timeout)
+    and takes only <command><crc> frames, where crc = (sum of the bytes
+    mod 256) xor 0xff, and answers <data...><crc>;
+  * commands: 0x00 version (25 bytes: "<hw>-<fw>", e.g.
+    mcu0_120_G32-mcu0_021_000), 0x03 sector size in KiB, 0x01 update (then
+    the 4-byte LE size, then sector-sized chunks, each followed by its crc;
+    replies 0x75 chunk ok, 0x20 done, 0x21 flash error, 0x1f bad crc),
+    0x02 start the application.
+  So whoever handshakes must also send "start", or the MCU never runs its
+  application: every command below ends by starting it.
 
 Usage:
-  k1os-mcu-flash PORT version             print the MCU's version string
-  k1os-mcu-flash PORT update FILE.bin     flash FILE and start it
-  k1os-mcu-flash PORT start               start the application
-Exit code 0 on success, 1 on a protocol or I/O failure.
+  k1os-mcu-flash PORT sync DIR          bring PORT to the image in DIR whose
+                                        name starts with the MCU's <hw>, then
+                                        start the application
+  k1os-mcu-flash PORT version           print the version string and start
+  k1os-mcu-flash PORT update FILE.bin   flash FILE and start it
+  k1os-mcu-flash PORT start             start the application
+Exit codes: 0 done, 1 protocol or I/O failure, 3 no bootloader on PORT (the
+application is already running; power-cycle the printer to get one).
 """
-import os, sys, time
+import glob, os, sys, time
 import serial
 
-MAGIC = b" \x1c Request Serial Bootloader!! ~"
+NO_BOOTLOADER = 3
+WAIT = 20.0  # seconds spent looking for the bootloader before giving up
 
 
 def crc(data):
@@ -58,35 +66,21 @@ class Bootloader:
             time.sleep(0.2)
         return None
 
-    def handshake(self, tries=5):
-        """A single 0x75 byte, answered by a single 0x75 (no crc on either)."""
-        for _ in range(tries):
+    def connect(self, wait=WAIT):
+        """Find the bootloader: a fresh one answers the handshake, one that
+        was already handshaked (by an earlier process) answers a version
+        request instead. A running application answers neither."""
+        self.open(115200)
+        deadline = time.monotonic() + wait
+        while True:
             self.ser.reset_input_buffer()
             self.ser.write(b"\x75")
             if self.ser.read(1) == b"\x75":
                 return True
-            time.sleep(1)
-        return False
-
-    def enter_from_app(self):
-        """Ask a running Klipper firmware to reboot into the bootloader."""
-        self.open(230400)
-        self.ser.write(MAGIC)
-        self.ser.flush()
-        self.close()
-        time.sleep(1)
-
-    def connect(self):
-        """Reach the bootloader. It listens for about 15 s after power-on;
-        a running application reboots into it only when its firmware was
-        built with the serial bootloader side-channel (neither Creality's
-        nor the Kalico images enable it), so that path is a short attempt."""
-        self.open(115200)
-        if self.handshake(tries=3):
-            return True
-        self.enter_from_app()
-        self.open(115200)
-        return self.handshake(tries=2)
+            if self.request(0x00, 26, tries=1) is not None:
+                return True
+            if time.monotonic() > deadline:
+                return False
 
     def version(self):
         r = self.request(0x00, 26)
@@ -99,7 +93,11 @@ class Bootloader:
         return r[0] if r else None
 
     def start_app(self):
-        return self.request(0x02, 2) == b"\x75"
+        for _ in range(3):
+            if self.request(0x02, 2) == b"\x75":
+                return True
+            time.sleep(0.5)
+        return False
 
     def update(self, path):
         data = open(path, "rb").read()
@@ -140,7 +138,29 @@ def firmware_header(path):
     """The 12-byte version string at offset 0x200, e.g. mcu0_021_000."""
     with open(path, "rb") as f:
         f.seek(0x200)
-        return f.read(12).decode("ascii", "replace")
+        return f.read(12).rstrip(b"\x00").decode("ascii", "replace")
+
+
+def valid_header(hdr):
+    return hdr[:4] in ("mcu0", "noz0", "bed0") and hdr[4] == "_" and hdr[8] == "_"
+
+
+def flash(bl, path, cur):
+    hdr = firmware_header(path)
+    if not valid_header(hdr):
+        log("%s has no Creality firmware header (%r)" % (path, hdr))
+        return False
+    if cur and cur[:4] != hdr[:4]:
+        log("board type mismatch (%s vs %s), refusing" % (cur, hdr))
+        return False
+    log("%s: %s -> %s, flashing %s" % (bl.port, cur, hdr, os.path.basename(path)))
+    return bl.update(path)
+
+
+def finish(bl, ok):
+    started = bl.start_app()
+    log("%s: start application %s" % (bl.port, "ok" if started else "FAILED"))
+    return 0 if ok and started else 1
 
 
 def main(argv):
@@ -151,31 +171,31 @@ def main(argv):
     bl = Bootloader(port)
     try:
         if not bl.connect():
-            log("%s: no bootloader handshake" % port)
-            return 1
-        if cmd == "version":
-            v = bl.version()
-            if v is None:
-                return 1
-            print(v)
-            return 0
+            log("%s: no bootloader (the application is running)" % port)
+            return NO_BOOTLOADER
         if cmd == "start":
-            return 0 if bl.start_app() else 1
+            return finish(bl, True)
+        cur = bl.version()
+        if cmd == "version":
+            if cur:
+                print(cur)
+            return finish(bl, cur is not None)
         if cmd == "update":
-            path = argv[3]
-            hdr = firmware_header(path)
-            if hdr[:4] not in ("mcu0", "noz0", "bed0") or hdr[4] != "_" or hdr[8] != "_":
-                log("%s has no Creality firmware header (%r)" % (path, hdr))
-                return 1
-            cur = bl.version()
-            log("%s: current %s, file %s" % (port, cur, os.path.basename(path)))
-            if cur and cur[:4] != hdr[:4]:
-                log("board type mismatch, refusing")
-                return 1
-            ok = bl.update(path)
-            started = bl.start_app()
-            log("start application: %s" % ("ok" if started else "FAILED"))
-            return 0 if ok and started else 1
+            return finish(bl, flash(bl, argv[3], cur))
+        if cmd == "sync":
+            if cur is None:
+                log("%s: no version answer" % port)
+                return finish(bl, False)
+            hw, _, fw = cur.partition("-")
+            files = sorted(glob.glob(os.path.join(argv[3], hw + "-*.bin")))
+            if not files:
+                log("%s: %s, no image for %s, leaving it" % (port, cur, hw))
+                return finish(bl, True)
+            want = firmware_header(files[0])
+            if fw == want:
+                log("%s: %s up to date" % (port, cur))
+                return finish(bl, True)
+            return finish(bl, flash(bl, files[0], cur))
         print(__doc__)
         return 2
     finally:
