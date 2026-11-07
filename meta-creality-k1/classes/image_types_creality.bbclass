@@ -1,4 +1,4 @@
-# Image type "creality-ota": a package the stock Creality updater (and K1 OS)
+# Image type "creality-ota": a package the stock Creality updater (and Datel OS)
 # installs into the inactive A/B slot of the K1.
 #
 # Format (reverse-engineered from firmware 1.3.3.46, see scripts/ota_pack.py):

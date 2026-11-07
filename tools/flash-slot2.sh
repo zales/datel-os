@@ -1,5 +1,5 @@
 #!/bin/bash
-# Write K1 OS into slot 2 (kernel2 = mmcblk0p6, rootfs2 = mmcblk0p8) over SSH,
+# Write Datel OS into slot 2 (kernel2 = mmcblk0p6, rootfs2 = mmcblk0p8) over SSH,
 # while stock keeps running from slot 1. Nothing else on the eMMC is touched.
 #
 #   tools/flash-slot2.sh            check only, writes nothing
@@ -8,7 +8,7 @@
 #
 # Images come from out/; OUT=out/kalico flashes another variant.
 #
-# K1 OS boots as a trial: its first step points the marker back at slot 1,
+# Datel OS boots as a trial: its first step points the marker back at slot 1,
 # so a power cycle returns to stock until you run "k1os-slot keep" on it.
 set -euo pipefail
 
@@ -16,7 +16,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PRINTER="${PRINTER:-root@192.168.1.104}"
 KEY="${KEY:-$HOME/.ssh/k1_printer_ecdsa}"
 PUBKEY="${PUBKEY:-$KEY.pub}"
-# Stock and K1 OS have different host keys and may swap IP leases, so the
+# Stock and Datel OS have different host keys and may swap IP leases, so the
 # host-key cache is not used; the printer is authenticated by our own key.
 SSH=(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$PRINTER")
@@ -40,7 +40,7 @@ pad4k() {
 
 [ -f "$KERNEL" ] || die "missing $KERNEL"
 [ -f "$ROOTFS" ] || die "missing $ROOTFS"
-[ -f "$PUBKEY" ] || die "missing $PUBKEY (K1 OS allows SSH login with a key only)"
+[ -f "$PUBKEY" ] || die "missing $PUBKEY (Datel OS allows SSH login with a key only)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 pad4k "$KERNEL" "$TMP/kernel"; pad4k "$ROOTFS" "$TMP/rootfs"
 KS=$(stat -f %z "$TMP/kernel"); RS=$(stat -f %z "$TMP/rootfs")
@@ -83,7 +83,7 @@ check)
     echo "== writing rootfs2 (p8), about a minute"
     "${SSH[@]}" 'dd of=/dev/mmcblk0p8 bs=4096 2>/dev/null; sync' < "$TMP/rootfs"
     verify /dev/mmcblk0p8 "$RS" "$RM"
-    echo "== SSH key for K1 OS (/usr/data/k1os/ssh/authorized_keys)"
+    echo "== SSH key for Datel OS (/usr/data/k1os/ssh/authorized_keys)"
     "${SSH[@]}" 'mkdir -p /usr/data/k1os/ssh && chmod 700 /usr/data/k1os/ssh && k=$(cat) &&
       { grep -qxF "$k" /usr/data/k1os/ssh/authorized_keys 2>/dev/null || echo "$k" >> /usr/data/k1os/ssh/authorized_keys; } &&
       chmod 600 /usr/data/k1os/ssh/authorized_keys && sync && wc -l < /usr/data/k1os/ssh/authorized_keys' < "$PUBKEY"
@@ -96,7 +96,7 @@ check)
       { printf "ota:kernel2\n\n"; dd if=/dev/zero bs=499 count=1 2>/dev/null; } > $b
       dd if=$b of=/dev/mmcblk0p1 bs=512 count=1 2>/dev/null; sync; rm -f $b
       dd if=/dev/mmcblk0p1 bs=512 count=1 2>/dev/null | tr -d "\000" | head -n 1'
-    echo "== marker points at slot 2. Power-cycle the printer to try K1 OS." ;;
+    echo "== marker points at slot 2. Power-cycle the printer to try Datel OS." ;;
 *)
     die "unknown option $MODE" ;;
 esac

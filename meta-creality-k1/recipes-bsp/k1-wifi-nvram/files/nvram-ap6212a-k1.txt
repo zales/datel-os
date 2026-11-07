@@ -3,7 +3,7 @@
 # /lib/firmware/wifi_bcm/nvram_ap6212a.txt (md5 3293a7a070fece69816803ca030c5afa),
 # which is the Ingenic SDK file external/wifi-ble/wifi/wifi_bcm/wifi_bcm_43438/new_fw/
 # nvram_ap6212a.txt (NebulaOS-kernel d86790d2) with ccode=CN instead of ccode=ALL.
-# The macaddr below is a vendor placeholder; K1 OS sets the printer's own MAC at boot.
+# The macaddr below is a vendor placeholder; Datel OS sets the printer's own MAC at boot.
 #AP6212A_NVRAM_V1.0.2_20191121
 # 2.4 GHz, 20 MHz BW mode
 

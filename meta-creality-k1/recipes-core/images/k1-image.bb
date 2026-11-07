@@ -1,4 +1,4 @@
-SUMMARY = "K1 OS: open-source firmware image for the Creality K1"
+SUMMARY = "Datel OS: open-source firmware image for the Creality K1"
 LICENSE = "MIT"
 
 inherit core-image
@@ -13,7 +13,7 @@ IMAGE_INSTALL = " \
     e2fsprogs-e2fsck \
     mtd-utils \
     python3 python3-pyserial \
-    k1os-base \
+    k1os-base datel-branding \
 "
 
 # Printing stack: Creality's Klipper (fits the stock MCU firmware), Moonraker,

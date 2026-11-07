@@ -24,7 +24,7 @@ guppyscreen_apply_patches() {
     cd ${S}/lv_drivers && patch -p1 --forward < ../patches/0001-lv_driver_fb_ioctls.patch || true
     cd ${S}/spdlog && patch -p1 --forward < ../patches/0002-spdlog_fmt_initializer_list.patch || true
     cd ${S}/lvgl && patch -p1 --forward < ../patches/0003-lvgl-dpi-text-scale.patch || true
-    # K1 OS keeps its data below /usr/data/k1os
+    # Datel OS keeps its data below /usr/data/k1os
     sed -i 's|/usr/data/printer_data|/usr/data/k1os/printer_data|g' ${S}/src/config.cpp ${S}/src/main.cpp
 }
 

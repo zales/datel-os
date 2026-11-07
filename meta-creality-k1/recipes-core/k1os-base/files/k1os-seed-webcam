@@ -36,4 +36,14 @@ for _ in range(60):
         err = e; time.sleep(5)
 else:
     print("k1os-seed-webcam: Moonraker not reachable: %s" % err, file=sys.stderr); sys.exit(1)
+# Mainsail shows the printer's name in its title bar; set it once, the UI keeps it editable.
+try:
+    if req("/server/database/item?namespace=mainsail&key=general").get("value") is None:
+        raise KeyError
+except Exception:
+    try:
+        req("/server/database/item", {"namespace": "mainsail", "key": "general", "value": {"printername": "Datel"}})
+        print("k1os-seed-webcam: named the printer 'Datel' in Mainsail")
+    except Exception as e:
+        print("k1os-seed-webcam: could not set the Mainsail printer name: %s" % e, file=sys.stderr)
 open(MARKER, "w").close()

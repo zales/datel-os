@@ -1,5 +1,5 @@
 [Unit]
-Description=K1 OS: stay on this slot if /usr/data/k1os/boot-keep exists
+Description=Datel OS: stay on this slot if /usr/data/k1os/boot-keep exists
 Requires=usr-data.mount k1os-trial-boot.service
 After=usr-data.mount k1os-datadir.service k1os-trial-boot.service
 

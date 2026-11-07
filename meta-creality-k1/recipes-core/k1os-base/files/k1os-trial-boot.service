@@ -1,5 +1,5 @@
 [Unit]
-Description=K1 OS trial boot: point the next boot at the other slot
+Description=Datel OS trial boot: point the next boot at the other slot
 DefaultDependencies=no
 Requires=dev-mmcblk0p1.device
 After=dev-mmcblk0p1.device

@@ -1,6 +1,6 @@
-SUMMARY = "K1 OS base system files"
-DESCRIPTION = "Mounts the shared /usr/data partition and prepares the K1 OS namespace on it. \
-K1 OS never mounts mmcblk0p9, the stock firmware's overlay partition."
+SUMMARY = "Datel OS base system files"
+DESCRIPTION = "Mounts the shared /usr/data partition and prepares the Datel OS namespace on it. \
+Datel OS never mounts mmcblk0p9, the stock firmware's overlay partition."
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 

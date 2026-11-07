@@ -1,0 +1,15 @@
+#!/bin/sh
+# Datel OS at every SSH login (/etc/profile.d/datel.sh runs it): the mark,
+# a woodpecker in half blocks, beside the host, the system and the board.
+# 256-colour codes, which every terminal takes. Missing files are skipped.
+[ -r /etc/os-release ] && . /etc/os-release
+host=$(cat /proc/sys/kernel/hostname)
+model=$(tr -d '\000' 2>/dev/null < /proc/device-tree/model)
+slot=$(k1os-slot status 2>/dev/null | awk '$1 == "running:" { s = $2 } $1 == "keep:" { k = $2 } END { if (s == "ota:kernel2") printf "slot 2"; else printf "slot 1"; if (k != "yes") printf " (trial)" }')
+r='\033[38;5;160m' k='\033[38;5;238m' w='\033[1;38;5;255m' m='\033[38;5;243m' a='\033[38;5;221m' n='\033[0m'
+
+printf '\n'
+printf "   ${r}▄██${n}         ${w}%s${n}\n" "$host"
+printf "  ${r}██${w}▀${r}█${a}▶${n}        ${r}%s${n} ${m}%s%s${n}\n" "${NAME:-Datel OS}" "${VERSION_ID:-?}" "${VERSION_CODENAME:+ · $VERSION_CODENAME}"
+printf "   ${k}▀██${n}         ${m}%s${n}${m}%s${n}\n" "${model:-Creality K1}" "${slot:+ · $slot}"
+printf "    ${k}▀▀${n}         ${m}${HOME_URL:-github.com/zales/k1-yocto}${n}\n"

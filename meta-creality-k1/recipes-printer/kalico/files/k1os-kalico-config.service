@@ -1,5 +1,5 @@
 [Unit]
-Description=K1 OS: convert the Creality Klipper config for Kalico (once)
+Description=Datel OS: convert the Creality Klipper config for Kalico (once)
 Requires=k1os-datadir.service
 After=k1os-datadir.service
 Before=klipper.service

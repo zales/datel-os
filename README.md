@@ -1,4 +1,8 @@
-# K1 OS: otevřený firmware pro Creality K1 na Yoctu
+<img src="docs/logo.svg" width="96" align="right" alt="Datel OS">
+
+# Datel OS: otevřený firmware pro Creality K1 na Yoctu
+
+**Datel** (strakapoud/datel) – pták, který klepe zobákem do dřeva. Přesně to dělá tahle tiskárna: tryska poklepe na podložku a tenzometry pod ní řeknou, kde je nula. Jméno je české, krátké a dá se vyslovit; hostname je `datel`, značka v terminálu i v Mainsailu je stejný pták. Interní jména souborů a cest (`k1os-*`, `/usr/data/k1os`) zůstávají – jsou to identifikátory, ne značka.
 
 Cíl je vlastní systém postavený celý ze zdrojových kódů: jádro, systém, Klipper, Moonraker, webové rozhraní, aplikace na displej i firmware všech tří MCU. Stock bootloader zůstává, takže se dá kdykoli vrátit ke stock firmwaru ve druhé sadě oddílů.
 
@@ -40,8 +44,8 @@ docker run --rm -u root -v k1yocto-work:/work -v "$PWD":/src:ro --entrypoint bas
 
 - **Bootloader předává `init=/linuxrc`.** Obraz proto vytváří `/linuxrc` jako odkaz na `/sbin/init`.
 - **Typ displeje vybírá bootloader** parametrem `lcm_id`. Tahle tiskárna má `lcm_id=3`, panel ST7701 „tjc“. Existuje ještě dalších pět variant panelu.
-- **Oddíl `mmcblk0p9` je zapisovatelná vrstva stocku** a jsou v ní tvoje úpravy. K1 OS ho nesmí připojit. Data ukládá jen do `/usr/data/k1os`.
-- **RTOS pro třetí jádro (`zero.bin`) je uzavřený.** Balík K1 OS ho neobsahuje a slot si nechá ten stávající.
+- **Oddíl `mmcblk0p9` je zapisovatelná vrstva stocku** a jsou v ní tvoje úpravy. Datel OS ho nesmí připojit. Data ukládá jen do `/usr/data/k1os`.
+- **RTOS pro třetí jádro (`zero.bin`) je uzavřený.** Balík Datel OS ho neobsahuje a slot si nechá ten stávající.
 - **Firmware Wi-Fi čipu je binární** (cyfmac43430 z linux-firmware). Jinak to nejde. NVRAM (kalibrace rádia) je soubor modulu AP6212A ze stocku, stejný jako v Ingenic SDK, jen s `ccode=CN`. Recept `k1-wifi-nvram` ho instaluje jako `brcmfmac43430-sdio.creality,k1.txt` a obecné jméno na něj odkazuje.
 - **Regulační databáze Wi-Fi** (`wireless-regdb-static`) je v obrazu, takže jádro použije zemi z `wpa_supplicant.conf`.
 - **Wi-Fi přebírá nastavení ze stocku.** Při prvním startu se `/usr/data/wpa_supplicant.conf` zkopíruje do `/usr/data/k1os/`. Další změny se mezi systémy nepřenáší.
@@ -56,12 +60,12 @@ Zjištěno ze zálohy bootloaderu a čtením ze živého stocku, na tiskárně s
 - Slot vybírá už SPL podle textu v p1 (`ota:kernel` nebo `ota:kernel2`). Pak načte RTOS daného slotu (p3 nebo p4), jádro (p5 nebo p6) a spustí ho s `root=/dev/mmcblk0p7` nebo `p8`.
 - Žádné počítadlo pokusů ani automatický návrat na stock nemá. NebulaOS to pro stejný bootloader na KE potvrzuje. Když nové jádro zamrzne, zamrzne při každém startu.
 - Plný U-Boot 2013.07 v obrazu je, s `bootdelay=1` a výzvou „Hit any key to stop autoboot“. Jestli ho SPL při běžném startu vůbec spouští, ukáže až konzole na J1.
-- RTOS ve slotu 2 (p4) má platnou hlavičku. Balík K1 OS ho nepřepisuje.
+- RTOS ve slotu 2 (p4) má platnou hlavičku. Balík Datel OS ho nepřepisuje.
 - Stock jádro nemá kexec, takže nové jádro nejde vyzkoušet bez restartu.
 
 **Wi-Fi piny (živý stock, `hardware/stock-gpio-live.txt`)**
 
-| Signál | Stock | K1 OS |
+| Signál | Stock | Datel OS |
 |---|---|---|
 | Napájení PA01 | výstup, 0 (zapnuto) | regulátor aktivní v nule, vždy zapnutý |
 | WL_REG_ON PE02 | výstup, 1 | `wlan-reg-on-gpios`, ovladač nastaví 1 |
@@ -80,13 +84,13 @@ Zjištěno ze zálohy bootloaderu a čtením ze živého stocku, na tiskárně s
 
 ## Zkušební start ze slotu 2
 
-Stock běží ze slotu 1 a zůstává tam. K1 OS se zapíše do slotu 2 (p6 a p8) přes SSH skriptem `tools/flash-slot2.sh`.
+Stock běží ze slotu 1 a zůstává tam. Datel OS se zapíše do slotu 2 (p6 a p8) přes SSH skriptem `tools/flash-slot2.sh`.
 
 1. `tools/flash-slot2.sh` jen kontroluje: běží slot 1, ukazatel je `ota:kernel`, netiskne se a obrazy se vejdou.
 2. `tools/flash-slot2.sh --write` zapíše jádro a systém, každý oddíl zpětně přečte a porovná MD5. Do `/usr/data/k1os/ssh/authorized_keys` přidá veřejný klíč `~/.ssh/k1_printer_ecdsa.pub`. Ukazatel nemění.
 3. `tools/flash-slot2.sh --switch` přepne ukazatel v p1 na `ota:kernel2`. Pak tiskárnu vypni a zapni.
 
-**Zkušební režim.** Hned na začátku startu K1 OS (`k1os-trial-boot.service`, před připojením souborových systémů) přepne ukazatel zpátky na `ota:kernel`. Když se systém kdekoli potom zasekne, stačí vypnout a zapnout a naběhne stock. Na novém systému zůstane tiskárna až po `k1os-slot keep`. `k1os-slot status` ukáže, odkud běží a kam půjde příští start.
+**Zkušební režim.** Hned na začátku startu Datel OS (`k1os-trial-boot.service`, před připojením souborových systémů) přepne ukazatel zpátky na `ota:kernel`. Když se systém kdekoli potom zasekne, stačí vypnout a zapnout a naběhne stock. Na novém systému zůstane tiskárna až po `k1os-slot keep`. `k1os-slot status` ukáže, odkud běží a kam půjde příští start.
 
 **Co tím chráněné není:** zaseknutí jádra dřív, než spustí první službu, například kvůli device tree nebo ovladači eMMC. Pak tiskárna startuje pořád do slotu 2 a vrátit ji jde jen přes USB (`usbboot --swap-ota`, `tools/usbboot/README.md`).
 
@@ -94,11 +98,11 @@ Stock běží ze slotu 1 a zůstává tam. K1 OS se zapíše do slotu 2 (p6 a p8
 
 ## První starty na tiskárně (7. 11. 2026)
 
-K1 OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-Fi se stejnou MAC jako stock, zkušební režim vrací ukazatel na stock. Chyby, které první starty odhalily, a jejich opravy:
+Datel OS nastartoval ze slotu 2 na první pokus: jádro 6.6.157-rt79, eMMC, Wi-Fi se stejnou MAC jako stock, zkušební režim vrací ukazatel na stock. Chyby, které první starty odhalily, a jejich opravy:
 
 | Co selhalo | Příčina | Oprava |
 |---|---|---|
-| SSH odmítalo klíč | poky na systému jen pro čtení spouští sshd s `sshd_config_readonly`; sshd bere první hodnotu klíčového slova | blok K1 OS je na začátku obou souborů (`openssh_%.bbappend`) |
+| SSH odmítalo klíč | poky na systému jen pro čtení spouští sshd s `sshd_config_readonly`; sshd bere první hodnotu klíčového slova | blok Datel OS je na začátku obou souborů (`openssh_%.bbappend`) |
 | Jiná IP (.102) | systemd-networkd se routeru hlásí vygenerovaným ID, ne MAC | `[DHCPv4] ClientIdentifier=mac` v `80-wlan.network` |
 | nginx neběžel | `listen [::]:80`, jádro nemá IPv6 | řádek odstraněn z `mainsail.nginx` |
 | Moonraker padal při importu | `streaming-form-data` importuje `smart_open` | recept `python3-smart-open` (+ `wrapt` z meta-python) |

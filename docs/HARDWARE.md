@@ -47,4 +47,4 @@ Zjištěno 5. 11. 2026 na tiskárně 192.168.1.104 přes SSH. Zdroje jsou v `har
 ## Bootloader
 
 - Načte `xImage` ze slotu podle značky v mmcblk0p1 a předá jádru `console=ttyS2,115200n8 mem=256M@0x0 lcm_id=3 init=/linuxrc root=/dev/mmcblk0p7 rootwait rootfstype=squashfs ro`.
-- Zdroj U-Boot pro X2000 je v Ingenic SDK, ale výměna bootloaderu je nejriskantnější krok. K1 OS ho zatím nemění.
+- Zdroj U-Boot pro X2000 je v Ingenic SDK, ale výměna bootloaderu je nejriskantnější krok. Datel OS ho zatím nemění.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Input shaper calibration for K1 OS without running the fit on the printer.
+# Input shaper calibration for Datel OS without running the fit on the printer.
 #
 # SHAPER_CALIBRATE forks a numpy process for the fit, which the K1's 256 MB
 # of RAM cannot hold: the child is OOM-killed and Klipper waits for it for

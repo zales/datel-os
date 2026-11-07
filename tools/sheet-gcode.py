@@ -28,7 +28,7 @@ e_per_mm = a.width * a.height / (math.pi * 0.875 ** 2)   # 1.75 mm filament
 n = int((hi - lo) / spacing) + 1
 lines = []
 w = lines.append
-w("; K1 OS bed sheet: %d layer(s), %.0fx%.0f mm, width %.2f, height %.2f" % (a.layers, hi - lo, hi - lo, a.width, a.height))
+w("; Datel OS bed sheet: %d layer(s), %.0fx%.0f mm, width %.2f, height %.2f" % (a.layers, hi - lo, hi - lo, a.width, a.height))
 w("START_PRINT EXTRUDER_TEMP=%.0f BED_TEMP=%.0f" % (a.ext, a.bed))
 w("G90")
 w("M82")

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Prepare the K1 OS namespace on the shared /usr/data partition.
-# K1 OS writes only below /usr/data/k1os; the stock firmware's files stay untouched.
+# Prepare the Datel OS namespace on the shared /usr/data partition.
+# Datel OS writes only below /usr/data/k1os; the stock firmware's files stay untouched.
 set -e
 D=/usr/data/k1os
 mkdir -p $D/printer_data/config $D/printer_data/logs $D/printer_data/database \
@@ -23,7 +23,7 @@ if [ -d /usr/data/printer_data/gcodes ] && [ ! -L $D/printer_data/gcodes ] && [ 
 fi
 
 # Creality's Klipper keeps runtime state in /usr/data/creality/userdata/config.
-# Give K1 OS its own copy so stock's power-loss recovery files are not touched.
+# Give Datel OS its own copy so stock's power-loss recovery files are not touched.
 mkdir -p /usr/data/creality
 mountpoint -q /usr/data/creality || mount --bind $D/creality /usr/data/creality
 
@@ -31,7 +31,7 @@ mountpoint -q /usr/data/creality || mount --bind $D/creality /usr/data/creality
 mkdir -p $D/guppyscreen $D/printer_data/thumbnails
 [ -e $D/guppyscreen/guppyconfig.json ] || cp /etc/k1os/guppyconfig.json $D/guppyscreen/ 2>/dev/null || true
 # Creality's Klipper reads its user settings (delay photography, power loss,
-# ...) from /usr/data/creality/userdata/config. K1 OS bind-mounts its own copy
+# ...) from /usr/data/creality/userdata/config. Datel OS bind-mounts its own copy
 # there, so seed it once from the stock files, which sit under the mount.
 if [ ! -e $D/creality/userdata/config/.seeded ]; then
     mkdir -p $D/creality/userdata/config /run/k1os-stockdata
@@ -50,6 +50,12 @@ mkdir -p $D/guppyscreen/themes
 for t in /usr/share/guppyscreen/themes/*.json; do
     [ -e "$D/guppyscreen/themes/$(basename "$t")" ] || cp "$t" "$D/guppyscreen/themes/"
 done
+
+# Mainsail's theme: the Datel OS logo and favicon, once; the user may change them.
+if [ ! -d $D/printer_data/config/.theme ] && [ -d /usr/share/datel/theme ]; then
+    mkdir -p $D/printer_data/config/.theme
+    cp /usr/share/datel/theme/* $D/printer_data/config/.theme/
+fi
 
 # Wi-Fi: start from the network the stock firmware already knows.
 if [ ! -e $D/wpa_supplicant.conf ]; then

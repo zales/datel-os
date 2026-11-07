@@ -1,5 +1,5 @@
 [Unit]
-Description=Prepare the K1 OS namespace on /usr/data
+Description=Prepare the Datel OS namespace on /usr/data
 RequiresMountsFor=/usr/data
 ConditionPathIsDirectory=/usr/data
 

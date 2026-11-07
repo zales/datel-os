@@ -1,5 +1,5 @@
 [Unit]
-Description=K1 OS: save this boot's journal and failed units to /usr/data/k1os/log
+Description=Datel OS: save this boot's journal and failed units to /usr/data/k1os/log
 Requires=usr-data.mount
 After=usr-data.mount
 

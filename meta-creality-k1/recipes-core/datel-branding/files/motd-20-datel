@@ -1,0 +1,109 @@
+#!/bin/sh
+# What the printer is doing, at every SSH login. Quick and quiet: whatever
+# cannot be found is left out. Moonraker answers on loopback; its queries
+# get a second each.
+b='\033[1;38;5;255m' d='\033[38;5;243m' f='\033[38;5;238m' c='\033[38;5;255m' g='\033[38;5;191m' y='\033[38;5;221m' r='\033[38;5;203m' n='\033[0m'
+section() {
+    chars=$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c)
+    rule=$(printf '%*s' $((54 - chars)) '' | sed 's/ /─/g')
+    printf "\n  ${f}──${n} ${b}%s${n} ${f}%s${n}\n" "$1" "$rule"
+}
+row() { printf "  ${d}%-10s${n}%b\n" "$1" "$2"; }
+warn() { printf "  ${y}▲ %b${n}\n" "$1"; }
+bar() {
+    filled=$(( $1 * 10 / ($2 > 0 ? $2 : 1) ))
+    [ "$filled" -gt 10 ] && filled=10
+    col=$g
+    [ $(( $1 * 100 )) -gt $(( $2 * 80 )) ] && col=$y
+    [ $(( $1 * 100 )) -gt $(( $2 * 95 )) ] && col=$r
+    printf "${col}%s${f}%s${n}" "$(printf '%*s' "$filled" '' | sed 's/ /■/g')" "$(printf '%*s' $((10 - filled)) '' | sed 's/ /■/g')"
+}
+# A field of a flat JSON object: strings without their quotes, numbers.
+json() { printf '%s' "$2" | sed -n "s/.*\"$1\": *\"\{0,1\}\([^,\"}]*\).*/\1/p" | head -n 1; }
+api() { wget -q -O - -T 1 -t 1 "http://127.0.0.1:7125/$1" 2>/dev/null; }
+
+# --- The system ---------------------------------------------------------
+section System
+ips=$(ip -4 addr show scope global 2>/dev/null | sed -n 's/^ *inet \([0-9.]*\)\/.*/\1/p' | head -n 2 | tr '\n' ' ')
+ssid=$(wpa_cli -i wlan0 status 2>/dev/null | sed -n 's/^ssid=//p' | head -n 1)
+dbm=$(awk '$1 == "wlan0:" { sub(/\./, "", $4); print $4 }' /proc/net/wireless 2>/dev/null)
+net=
+if [ -n "$ssid" ]; then
+    net="WiFi ${b}$ssid${n}"
+    case $dbm in
+    -[0-9]*)
+        [ "$dbm" -lt -100 ] && dbm=-100
+        [ "$dbm" -gt -40 ] && dbm=-40
+        q=$((100 - (-40 - dbm) * 100 / 60))
+        lit=$(( (q + 24) / 25 ))
+        bars= i=1
+        for s in ▂ ▄ ▆ █; do
+            if [ "$i" -le "$lit" ]; then bars="$bars${g}$s"; else bars="$bars${f}$s"; fi
+            i=$((i + 1))
+        done
+        net="$net $bars${n} ${d}$dbm dBm${n}" ;;
+    esac
+fi
+row Network "${ips:+${b}${ips% }${n}}${net:+ · $net}"
+up=$(awk '{ s = int($1); printf "%dd %dh %dm", s / 86400, (s % 86400) / 3600, (s % 3600) / 60 }' /proc/uptime 2>/dev/null)
+load=$(cut -d ' ' -f 1-3 /proc/loadavg 2>/dev/null)
+row Uptime "${b}${up#0d }${n} ${d}· load $load${n}"
+set -- $(awk '/^MemTotal/ { t = $2 } /^MemAvailable/ { a = $2 } END { print t, t - a }' /proc/meminfo 2>/dev/null)
+[ -n "${1-}" ] && row Memory "$(bar "$2" "$1") ${d}$(( $2 / 1024 )) of $(( $1 / 1024 )) MB${n}"
+set -- $(df -k /usr/data 2>/dev/null | awk 'NR == 2 { print $2, $3 }')
+[ -n "${1-}" ] && row Data "$(bar "$2" "$1") ${d}$(( $2 / 1024 )) of $(( $1 / 1024 )) MB in /usr/data${n}"
+
+# --- The printer ----------------------------------------------------------
+section Printer
+info=$(api server/info)
+state=$(json klippy_state "$info")
+case $state in
+ready) s="${g}● ready${n}" ;;
+startup) s="${y}● starting${n}" ;;
+'') s="${r}● Moonraker not answering${n}" ;;
+*) s="${r}● $state${n}" ;;
+esac
+klipper=$(json software_version "$(api printer/info)")
+row Klipper "$s${klipper:+ ${d}· $klipper${n}}"
+if [ "$state" = ready ]; then
+    q=$(api 'printer/objects/query?print_stats&display_status=progress&extruder=temperature,target&heater_bed=temperature,target')
+    ps=$(json state "$q")
+    file=$(json filename "$q")
+    prog=$(printf '%s' "$q" | sed -n 's/.*"progress": *\([0-9.]*\).*/\1/p' | awk '{ printf "%d", $1 * 100 }')
+    case $ps in
+    printing) row Print "${g}printing${n} ${b}$file${n} ${d}· $prog %${n}" ;;
+    paused) row Print "${y}paused${n} ${b}$file${n} ${d}· $prog %${n}" ;;
+    '' | standby) ;;
+    *) row Print "${d}$ps${n}${file:+ ${d}$file${n}}" ;;
+    esac
+    ext=$(printf '%s' "$q" | sed -n 's/.*"extruder": *{[^}]*"temperature": *\([0-9.]*\).*/\1/p')
+    extt=$(printf '%s' "$q" | sed -n 's/.*"extruder": *{[^}]*"target": *\([0-9.]*\).*/\1/p')
+    bed=$(printf '%s' "$q" | sed -n 's/.*"heater_bed": *{[^}]*"temperature": *\([0-9.]*\).*/\1/p')
+    bedt=$(printf '%s' "$q" | sed -n 's/.*"heater_bed": *{[^}]*"target": *\([0-9.]*\).*/\1/p')
+    [ -n "$ext" ] && row Heat "${d}nozzle${n} ${b}${ext%.*}${n}${d}/${extt%.*} °C · bed${n} ${b}${bed%.*}${n}${d}/${bedt%.*} °C${n}"
+    m=$(api 'printer/objects/query?mcu=mcu_version&mcu%20nozzle_mcu=mcu_version&mcu%20leveling_mcu=mcu_version')
+    vers=$(printf '%s' "$m" | grep -o '"mcu_version": *"[^"]*"' | sed 's/.*: *"//; s/"//; s/-.*//' | sort -u | tr '\n' ' ')
+    [ -n "$vers" ] && row MCUs "${d}main, nozzle, bed:${n} ${b}${vers% }${n}"
+fi
+cam=$(systemctl is-active ustreamer 2>/dev/null)
+[ "$cam" = active ] && row Camera "${g}● streaming${n} ${d}http://${ips%% *}/webcam/${n}"
+
+# --- Anything wrong -----------------------------------------------------
+warnings=
+problem() { [ -n "$warnings" ] || section Attention; warnings=1; warn "$1"; }
+[ "$state" != ready ] && [ -n "$state" ] && [ "$state" != startup ] &&
+    problem "Klipper is not ready: ${c}journalctl -u klipper -b${n} ${d}or${n} ${c}FIRMWARE_RESTART${n} ${d}in Mainsail${n}"
+k1os-slot status 2>/dev/null | grep -q 'keep: *no' &&
+    problem "Trial boot: a power cycle returns to the stock firmware (${c}k1os-slot keep${n} makes this permanent)"
+failed=$(systemctl list-units --state=failed --no-legend --plain 2>/dev/null | wc -l)
+[ "$failed" -gt 0 ] && problem "$failed failed units: ${c}systemctl --failed${n}"
+dmesg 2>/dev/null | grep -q 'Out of memory: Killed' && problem "The kernel killed a process for memory: ${c}dmesg | grep -i oom${n}"
+
+# --- Where to start -----------------------------------------------------
+section Commands
+tip() { printf "  ${c}%-36s${n}  ${d}%s${n}\n" "$1" "$2"; }
+tip "journalctl -u klipper -f" "Klipper's log"
+tip "k1os-slot status" "which slot runs, which boots next"
+tip "/usr/data/k1os/printer_data/config/" "printer.cfg and the Datel OS fragment"
+[ -n "${ips%% *}" ] && printf "\n  ${d}Mainsail:${n} ${c}http://${ips%% *}/${n}\n"
+printf '\n'

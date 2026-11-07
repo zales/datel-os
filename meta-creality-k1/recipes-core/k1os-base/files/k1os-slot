@@ -2,7 +2,7 @@
 # Boot slot marker in mmcblk0p1, read by the stock SPL on every power-up:
 #   "ota:kernel"  -> slot 1 (kernel p5, rootfs p7)
 #   "ota:kernel2" -> slot 2 (kernel p6, rootfs p8)
-# The SPL has no boot counter and no fallback, so K1 OS boots as a trial:
+# The SPL has no boot counter and no fallback, so Datel OS boots as a trial:
 #   trial    first thing at boot: point the marker at the other slot, so a
 #            hang or a power cycle from here on brings the other system back
 #   confirm  after /usr/data is up: point it back at this slot, but only if

@@ -1,5 +1,5 @@
 [Unit]
-Description=K1 OS: register the camera in Moonraker once
+Description=Datel OS: register the camera in Moonraker once
 Requires=usr-data.mount
 After=usr-data.mount moonraker.service
 ConditionPathExists=!/usr/data/k1os/webcam-seeded
