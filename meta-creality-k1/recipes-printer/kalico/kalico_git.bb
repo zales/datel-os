@@ -44,6 +44,8 @@ do_install() {
     install -d ${D}${KLIPPER_DIR}
     cp -R --no-preserve=ownership ${S}/klippy ${D}${KLIPPER_DIR}/
     cp -R --no-preserve=ownership ${S}/config ${D}${KLIPPER_DIR}/
+    # Moonraker serves <klipper>/docs and warns when the directory is missing
+    cp -R --no-preserve=ownership ${S}/docs ${D}${KLIPPER_DIR}/
     install -m 0644 ${S}/klippy/chelper/c_helper.so ${D}${KLIPPER_DIR}/klippy/chelper/c_helper.so
     find ${D}${KLIPPER_DIR} -name '*.o' -delete
     python3 -m compileall -q -j 0 -s ${D} -p / ${D}${KLIPPER_DIR}/klippy || true
