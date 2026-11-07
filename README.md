@@ -132,6 +132,8 @@ Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji na
 1. Ze stocku: `OUT=out/kalico PRINTER=root@<ip> tools/flash-slot2.sh --write`, `--switch`, restart.
 2. Při prvním startu `k1os-kalico-config` převede konfiguraci (záloha vedle v `config.creality-<datum>`), `k1os-mcu-update` nahraje nový firmware do tří MCU (asi 10 s, všechny najednou; jen po zapnutí ze studena, po pouhém restartu systému zůstává starý firmware a Kalico se k MCU nepřipojí), pak naběhne Kalico.
 3. V Mainsailu: `LOAD_CELL_DIAGNOSTIC`, potom `LOAD_CELL_CALIBRATE` se závažím asi 6 kg (`TARE`, `CALIBRATE GRAMS=6000`, `ACCEPT`, `SAVE_CONFIG`).
+4. Input shaper: `SHAPER_CALIBRATE` na tiskárně nejde (výpočet v numpy potřebuje víc než 256 MB RAM, proces skončí OOM a Klipper na něj čeká napořád – pomůže `systemctl restart klipper`). Místo toho `TEST_RESONANCES AXIS=X OUTPUT=raw_data`, totéž pro Y, a na počítači `PRINTER=root@<ip> tools/shaper-fit.sh`; výsledek zapsat do bloku SAVE_CONFIG v `printer.cfg`.
+5. Sonda jede 3 mm/s (stejně opakovatelné jako 1 mm/s, mesh o 40 % rychlejší); `homing_speed` osy Z je stejná, aby G28 Z a mesh měly jednu referenci.
 4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
 5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
 

@@ -48,7 +48,7 @@ def rewrite_printer_cfg(path):
                 elif k == "position_endstop":
                     continue
                 new.append(l)
-            new.insert(1, "homing_retract_dist: 0\nhoming_speed: 2.0\n")
+            new.insert(1, "homing_retract_dist: 0\nhoming_speed: 3.0\n")
             lines = new
         if name == "printer":
             lines = [l for l in lines if l.split(":")[0].strip()
