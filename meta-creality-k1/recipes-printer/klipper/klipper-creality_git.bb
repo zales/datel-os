@@ -49,8 +49,10 @@ do_compile() {
 do_install() {
     install -d ${D}${KLIPPER_DIR}
     cp -R --no-preserve=ownership ${S}/klippy ${D}${KLIPPER_DIR}/
-    # Moonraker serves <klipper>/docs and warns when the directory is missing
-    cp -R --no-preserve=ownership ${S}/docs ${D}${KLIPPER_DIR}/
+    # Moonraker serves <klipper>/docs and warns when the directory is missing;
+    # the text alone (the images are 20 MB)
+    install -d ${D}${KLIPPER_DIR}/docs
+    install -m 0644 ${S}/docs/*.md ${D}${KLIPPER_DIR}/docs/
     install -m 0644 ${S}/klippy/chelper/c_helper.so ${D}${KLIPPER_DIR}/klippy/chelper/c_helper.so
     find ${D}${KLIPPER_DIR} -name '*.o' -delete
     # The read-only root cannot hold __pycache__ at runtime; compile it now.
