@@ -18,27 +18,34 @@ Verze tagu musí sedět s `DISTRO_VERSION` v `meta-creality-k1/conf/distro/k1os.
 
 ## Kde se staví a proč
 
-Build běží na **self-hosted runneru na tvém Macu**, tedy tam, kde se staví dnes: `./build.sh` v Dockeru s volume `k1yocto-work`, ve které je sdílená `sstate-cache` (9 GB) a `downloads` (4,6 GB). Díky tomu vydání z tagu trvá minuty, ne hodiny, a sestavuje se přesně otagovaný strom, ne to, co máš zrovna rozpracované. Zveřejnění pak dělá obyčejný runner GitHubu (`ubuntu-latest`), ten jen kontroluje a nahrává.
+Build běží na **self-hosted runneru na NASu `zlsnas`** (Raspberry Pi 5, Debian 13, Docker, NVMe), stejně jako na Macu: `./build.sh` v Dockeru s volume `k1yocto-work`, ve které je `sstate-cache` a `downloads`. Volume vznikla kopií té z Macu; oba stroje staví v kontejneru linux/arm64 (`BUILD_SYS = aarch64-linux`), takže sstate je mezi nimi přenosná a vydání z tagu trvá minuty. Staví se přesně otagovaný strom, ne rozpracovaná kopie. Zveřejnění dělá obyčejný runner GitHubu (`ubuntu-latest`), ten jen kontroluje a nahrává.
 
-Runner od GitHubu na build nestačí: čistý build Yocta je několik hodin na 4 jádrech (limit jobu je 6 hodin), potřebuje přes 30 GB místa (runner má 14 GB) a `sstate-cache` se do 10GB cache Actions nevejde. Větší runnery jsou placené. Pro soukromý repozitář jednoho člověka se self-hosted runner nevyplatí nahrazovat.
+NAS běží pořád, Mac ne; proto je runner tam. Runner od GitHubu na build nestačí: čistý build Yocta je několik hodin na 4 jádrech (limit jobu je 6 hodin), potřebuje přes 30 GB místa (runner má 14 GB) a `sstate-cache` se do 10GB cache Actions nevejde. Větší runnery jsou placené.
 
 Bez běžícího runneru tag nic nerozbije: job čeká ve frontě (až 24 hodin), dokud runner nenaběhne, a pak proběhne.
 
-### Runner: jednorázové nastavení
+### Runner na zlsnas
 
-Na Macu musí běžet Docker Desktop. Runner je obyčejný proces pod tvým účtem, nic nepotřebuje práva správce.
+Je nainstalovaný v `~zales/actions-runner` jako služba systemd `actions.runner.zales-k1-yocto.zlsnas`, jméno `zlsnas`, label **`k1-yocto`** (workflow ho žádá přes `runs-on: [self-hosted, k1-yocto]`). Běží pod uživatelem `zales` ve skupině `docker`.
 
-1. GitHub → repozitář → *Settings* → *Actions* → *Runners* → *New self-hosted runner* → macOS, ARM64. Stránka ukáže příkazy ke stažení a `./config.sh` s čerstvým tokenem.
-2. Při `./config.sh` zadej label **`k1-yocto`** (na to se workflow ptá přes `runs-on: [self-hosted, k1-yocto]`), ostatní nech výchozí. Spouštěj ho z terminálu, kde je `docker` v `PATH`: runner si `PATH` z té chvíle uloží do `.path` a používá ho pro joby.
-3. Spuštění: buď jen při vydání ručně `./run.sh` (po skončení jobu ho ukonči Ctrl-C), nebo trvale jako služba `./svc.sh install && ./svc.sh start`.
+```bash
+ssh zlsnas.local 'cd actions-runner && sudo ./svc.sh status'
+```
 
-Runner i tvoje ruční `./build.sh` používají stejnou volume; bitbake si ji zamkne, takže dva buildy najednou se nespustí, druhý počká nebo spadne. Během vydání nestav ručně. `tools/release.sh` obalí build do `caffeinate -i`, aby Mac mezitím neusnul.
+`./build.sh` bere počet vláken bitbake a `make -j` z počtu jader hostitele (na Pi 4; `JOBS=` to přebije) a kontejner spouští s `--cpu-shares 512`, takže při souběhu ustoupí ostatním kontejnerům na NASu (Home Assistant a spol.). Cache hit trvá minuty; překlad jádra nebo gcc po změně tune trvá na Pi několikanásobně déle než na Macu, ale proběhne.
+
+Nový runner jinde (nebo znovu na NASu): GitHub → repozitář → *Settings* → *Actions* → *Runners* → *New self-hosted runner*, při `./config.sh` zadat label `k1-yocto`, potom `sudo ./svc.sh install <uživatel> && sudo ./svc.sh start`. Runner si uloží `PATH` z chvíle konfigurace do `.path`; `docker` v něm musí být. Před prvním buildem zkopíruj `sstate-cache` a `downloads` z existující volume, jinak se staví od nuly (hodiny):
+
+```bash
+docker run --rm -v k1yocto-work:/work:ro busybox tar cf - -C /work/k1-yocto/build sstate-cache downloads | ssh <stroj> 'docker run --rm -i -v k1yocto-work:/work busybox sh -c "mkdir -p /work/k1-yocto/build && tar xf - -C /work/k1-yocto/build && chown -R 30000:30000 /work/k1-yocto"'
+```
+
+Runner a ruční `./build.sh` na stejném stroji používají jednu volume; bitbake si ji zamkne, takže dva buildy najednou se nespustí. Na Macu zůstává vlastní volume pro vývoj; změny v `sstate-cache` se mezi stroji nesynchronizují, každý si ji plní sám.
 
 ## Jak vydat verzi
 
 1. Zvyš `DISTRO_VERSION` v `meta-creality-k1/conf/distro/k1os.conf` (a případně `DISTRO_CODENAME`), commitni do `main`.
-2. Spusť runner, pokud neběží jako služba.
-3. Otaguj a pošli tag:
+2. Otaguj a pošli tag:
 
 ```bash
 git tag -a v0.3.0 -m "Datel OS 0.3.0"
@@ -48,13 +55,13 @@ git tag -a v0.3.0 -m "Datel OS 0.3.0"
 git push origin v0.3.0
 ```
 
-4. Sleduj *Actions* → *Release firmware*. Job `build` staví `klipper-creality` a potom `kalico` (obě varianty sdílejí build adresář, proto po sobě), job `publish` zkontroluje soubory a vytvoří Release `Datel OS v0.3.0`. Tag s pomlčkou (`v0.3.0-rc1`) vznikne jako *pre-release*; verze před pomlčkou musí pořád sedět s `DISTRO_VERSION`.
+3. Sleduj *Actions* → *Release firmware*. Job `build` staví `klipper-creality` a potom `kalico` (obě varianty sdílejí build adresář, proto po sobě), job `publish` zkontroluje soubory a vytvoří Release `Datel OS v0.3.0`. Tag s pomlčkou (`v0.3.0-rc1`) vznikne jako *pre-release*; verze před pomlčkou musí pořád sedět s `DISTRO_VERSION`.
 
 Vydání jde zopakovat ručně přes *Actions* → *Release firmware* → *Run workflow* s názvem existujícího tagu; soubory v Release se přepíšou a poznámky obnoví.
 
 ### Ručně bez runneru
 
-Totéž, co dělá workflow, na Macu:
+Totéž, co dělá workflow, na Macu nebo na NASu (potřebuje `7zz`, na Macu `brew install sevenzip`):
 
 ```bash
 TAG=v0.3.0 tools/release.sh build
