@@ -141,6 +141,7 @@ Převod konfigurace je ověřený na kopii konfigurace z tiskárny: Kalico ji na
 7. Ventilátory K1: `fan0` ofuk výtisku (deska trysky), `fan1` komorový (zadní, s filtrem), `fan2` pomocný boční ofuk. Makra Creality mapují `M106 P<n>` 1:1, takže z Orcy je pomocný `P2` správně; odtah (`P3`) by ale makro Creality poslalo na `fan0`, proto ho převod konfigurace směruje na `fan1`. Posuvníky `output_pin` v Mainsailu posílají surovou PWM bez minima (Creality: fan1 od 50/255, fan2 od 180/255), takže pod tou hodnotou se ventilátor neroztočí.
 5. Sonda jede 3 mm/s (stejně opakovatelné jako 1 mm/s, mesh o 40 % rychlejší); `homing_speed` osy Z je stejná, aby G28 Z a mesh měly jednu referenci.
 4. `G28`, `PROBE_ACCURACY`, nastavení `z_offset` sondy, `BED_MESH_CALIBRATE`.
+8. Po teplém restartu ze stocku do Datel OS (cesta při flashování: `k1os-slot release`, reboot, zápis, `--switch`, reboot) zůstane hlavní MCU ve stavu shutdown a Kalico ohlásí „Can not update MCU 'mcu' config as it is shutdown“. Jeden `FIRMWARE_RESTART` to srovná (asi 20 s); při běžném startu Datel OS se to neděje.
 5. Návrat: vypnout a zapnout (zkušební režim) vrátí stock, který si firmware MCU přeflashuje na svůj.
 
 ## Fáze
