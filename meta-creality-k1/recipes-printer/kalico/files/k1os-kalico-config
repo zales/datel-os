@@ -7,9 +7,9 @@ included for the load cell probe, bed mesh and shims.
 """
 import os, re, shutil, sys
 
-CFG = "/usr/data/k1os/printer_data/config"
+CFG = os.environ.get("K1OS_CONFIG_DIR", "/usr/data/k1os/printer_data/config")
 MARK = os.path.join(CFG, ".k1os-kalico")
-FRAG = "/etc/k1os/k1os_kalico.cfg"
+FRAG = os.environ.get("K1OS_KALICO_FRAGMENT", "/etc/k1os/k1os_kalico.cfg")
 
 DROP_SECTIONS = {"prtouch_v2", "bl24c16f", "mcu rpi", "mcu leveling_mcu",
                  "custom_macro", "fan_feedback", "bed_mesh"}
@@ -73,7 +73,7 @@ def sub_file(path, pairs):
         return
     s = open(path).read()
     for a, b in pairs:
-        s = re.sub(a, b, s)
+        s = re.sub(a, b, s, flags=re.M)
     open(path, "w").write(s)
 
 
