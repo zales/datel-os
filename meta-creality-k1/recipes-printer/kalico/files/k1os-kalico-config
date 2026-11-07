@@ -14,6 +14,24 @@ FRAG = os.environ.get("K1OS_KALICO_FRAGMENT", "/etc/k1os/k1os_kalico.cfg")
 DROP_SECTIONS = {"prtouch_v2", "bl24c16f", "mcu rpi", "mcu leveling_mcu",
                  "custom_macro", "fan_feedback", "bed_mesh"}
 DROP_SAVE_CONFIG_SECTIONS = ("bed_mesh ", "prtouch")
+# Starting values for the SAVE_CONFIG block, measured on a K1 with Kalico. They
+# go into the autosave block rather than k1os_kalico.cfg because Klipper refuses
+# SAVE_CONFIG when an option exists in both; a later LOAD_CELL_CALIBRATE or
+# shaper measurement simply overwrites them. Sections the stock block already
+# has (Creality calibrates the shaper itself) are kept as they are.
+SAVE_CONFIG_HEADER = (
+    "#*# <---------------------- SAVE_CONFIG ---------------------->\n"
+    "#*# DO NOT EDIT THIS BLOCK OR BELOW. The contents are auto-generated.\n"
+    "#*#\n")
+SEED_SAVE_CONFIG = {
+    "input_shaper": (("shaper_type_x", "ei"), ("shaper_freq_x", "42.2"),
+                     ("shaper_type_y", "mzv"), ("shaper_freq_y", "53.2")),
+    # HX711 + Creality strain gauges: counts per gram varies a few percent
+    # between printers (it only scales the trigger force), the tare just sets
+    # the gram readout; the probe tares itself before every measurement.
+    "load_cell_probe": (("counts_per_gram", "116.71463"),
+                        ("reference_tare_counts", "1688742")),
+}
 
 
 def sections(text):
@@ -65,6 +83,14 @@ def rewrite_printer_cfg(path):
             skip = m.group(1).startswith(DROP_SAVE_CONFIG_SECTIONS)
         if not skip:
             keep.append(l)
+    have = {m.group(1) for m in re.finditer(r"^#\*# \[([^\]]+)\]", "".join(keep), re.M)}
+    if not keep:
+        keep.append(SAVE_CONFIG_HEADER)
+    while keep and keep[-1].strip() == "#*#":
+        keep.pop()
+    for sec, opts in SEED_SAVE_CONFIG.items():
+        if sec not in have:
+            keep.append("#*#\n#*# [%s]\n" % sec + "".join("#*# %s = %s\n" % kv for kv in opts))
     open(path, "w").write(body + "".join(keep))
 
 
