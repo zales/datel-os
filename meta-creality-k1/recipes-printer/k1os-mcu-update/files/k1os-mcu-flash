@@ -69,24 +69,32 @@ class Bootloader:
     def connect(self, wait=WAIT):
         """Find the bootloader: a fresh one answers the handshake, one that
         was already handshaked (by an earlier process) answers a version
-        request instead. A running application answers neither."""
+        request instead. A running application answers neither, but it is
+        not quiet: the bed MCU keeps streaming sensor frames at 230400 baud
+        after the host has gone, which at 115200 reads as an endless noise
+        stream where a 0x75 byte or a 26-byte frame with the right crc turns
+        up within seconds. So the port counts as a bootloader only when it
+        answers a version request with a plausible version string."""
         self.open(115200)
         deadline = time.monotonic() + wait
         while True:
             self.ser.reset_input_buffer()
             self.ser.write(b"\x75")
-            if self.ser.read(1) == b"\x75":
-                return True
-            if self.request(0x00, 26, tries=1) is not None:
+            hello = self.ser.read(1) == b"\x75"
+            if self.version(tries=3 if hello else 1) is not None:
                 return True
             if time.monotonic() > deadline:
                 return False
 
-    def version(self):
-        r = self.request(0x00, 26)
+    def version(self, tries=3):
+        r = self.request(0x00, 26, tries=tries)
         if r is None:
             return None
-        return r.rstrip(b"\x00").decode("ascii", "replace")
+        v = r.rstrip(b"\x00").decode("ascii", "replace")
+        hw, sep, fw = v.partition("-")
+        if not (sep and valid_header(hw) and valid_header(fw)):
+            return None  # noise that happened to pass the crc
+        return v
 
     def sector_kib(self):
         r = self.request(0x03, 2)
@@ -142,7 +150,9 @@ def firmware_header(path):
 
 
 def valid_header(hdr):
-    return hdr[:4] in ("mcu0", "noz0", "bed0") and hdr[4] == "_" and hdr[8] == "_"
+    """mcu0_021_000 (a firmware) or mcu0_120_G32 (a board)."""
+    return (len(hdr) >= 12 and hdr[:4] in ("mcu0", "noz0", "bed0")
+            and hdr[4] == "_" and hdr[5:8].isdigit() and hdr[8] == "_")
 
 
 def flash(bl, path, cur):
