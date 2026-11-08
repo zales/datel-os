@@ -4,7 +4,7 @@
 set -e
 D=/usr/data/k1os
 mkdir -p $D/printer_data/config $D/printer_data/logs $D/printer_data/database \
-         $D/printer_data/gcodes $D/printer_data/comms $D/creality/userdata/config \
+         $D/printer_data/gcodes $D/printer_data/comms \
          $D/klipper/pres_data $D/guppyscreen
 
 # First boot: start from the printer's own stock Klipper config.
@@ -34,27 +34,9 @@ if [ -d /usr/data/printer_data/gcodes ] && [ ! -L $D/printer_data/gcodes ] && [ 
     rmdir $D/printer_data/gcodes && ln -s /usr/data/printer_data/gcodes $D/printer_data/gcodes
 fi
 
-# Creality's Klipper keeps runtime state in /usr/data/creality/userdata/config.
-# Give Datel OS its own copy so stock's power-loss recovery files are not touched.
-mkdir -p /usr/data/creality
-mountpoint -q /usr/data/creality || mount --bind $D/creality /usr/data/creality
-
 # GuppyScreen keeps its config and theme list next to guppyconfig.json.
 mkdir -p $D/guppyscreen $D/printer_data/thumbnails
 [ -e $D/guppyscreen/guppyconfig.json ] || cp /etc/k1os/guppyconfig.json $D/guppyscreen/ 2>/dev/null || true
-# Creality's Klipper reads its user settings (delay photography, power loss,
-# ...) from /usr/data/creality/userdata/config. Datel OS bind-mounts its own copy
-# there, so seed it once from the stock files, which sit under the mount.
-if [ ! -e $D/creality/userdata/config/.seeded ]; then
-    mkdir -p $D/creality/userdata/config /run/k1os-stockdata
-    if mount --bind /usr/data /run/k1os-stockdata 2>/dev/null; then
-        [ -d /run/k1os-stockdata/creality/userdata/config ] && cp -rn /run/k1os-stockdata/creality/userdata/config/. $D/creality/userdata/config/
-        umount /run/k1os-stockdata
-    fi
-    rmdir /run/k1os-stockdata 2>/dev/null
-    touch $D/creality/userdata/config/.seeded
-fi
-
 # Themes must be real, writable files: Guppy Screen opens the selected theme
 # read-write and writes it back, and that open fails on the read-only root.
 [ -L $D/guppyscreen/themes ] && rm -f $D/guppyscreen/themes

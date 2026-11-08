@@ -48,7 +48,7 @@ Datel OS started from slot 2 on the first try: kernel 6.6.157-rt79, eMMC, Wi-Fi 
 
 ## 8 November 2026: Kalico in both slots
 
-Slot 1 was overwritten with the Kalico variant as well; stock is gone from the reference printer and its partitions are in the backup. Slot 1 booted and Klipper was ready without `FIRMWARE_RESTART`, which was only needed after a warm restart from stock.
+Slot 1 was overwritten with Datel OS as well; stock is gone from the reference printer and its partitions are in the backup. Slot 1 booted and Klipper was ready without `FIRMWARE_RESTART`, which was only needed after a warm restart from stock.
 
 ## 8 November 2026: Helix video codec
 
@@ -73,7 +73,7 @@ Stock Creality recorded its timelapse with the X2000's Helix block: its Klipper 
 
 0. **Rescue:** eMMC backup and USB mask-ROM boot. Backup done; USB boot described, not verified on S12.
 1. **First boot:** kernel and minimal system in the inactive slot, console, SSH, Wi-Fi, `/usr/data`. Done, 7 November 2026.
-2. **Printing:** Klipper, Moonraker, Mainsail. Done, both variants.
+2. **Printing:** Klipper, Moonraker, Mainsail. Done. Creality's Klipper served as the fallback during bring-up and was dropped on 8 November 2026; Kalico is the only system.
 3. **Display:** K1 panel driver and GuppyScreen. Missing.
-4. **MCUs:** open firmware for all three MCUs and flashing through the Creality serial bootloader. Done in the Kalico variant.
+4. **MCUs:** open firmware for all three MCUs and flashing through the Creality serial bootloader. Done.
 5. **Updates:** A/B writes and trial boot work; an updater on the printer and an open bootloader with a boot counter (`feat/uboot`) remain.

@@ -8,9 +8,9 @@
 #   tools/flash-slot2.sh --write    write and verify the slot, marker untouched
 #   tools/flash-slot2.sh --switch   point the marker at that slot (next boot)
 #
-# SLOT=2 (default) or SLOT=1 picks the target. Images come from out/;
-# OUT=out/kalico flashes another variant. KERNEL= and ROOTFS= name the two
-# files directly, e.g. the ones from a GitHub Release.
+# SLOT=2 (default) or SLOT=1 picks the target. Images come from out/
+# (OUT= names another directory); KERNEL= and ROOTFS= name the two files
+# directly, e.g. the ones from a GitHub Release.
 #
 # Datel OS boots as a trial: its first step points the marker back at slot 1,
 # so a power cycle returns to stock until you run "k1os-slot keep" on it.
