@@ -190,7 +190,7 @@ notes() {
     prev=$(git -C "$HERE" describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
     echo "Datel OS images for the Creality K1 (board $BOARD, Ingenic X2000), built from commit $sha."
     echo
-    echo "| Soubor | Obsah |"
+    echo "| File | Contents |"
     echo "|---|---|"
     echo "| \`$KERNEL_NAME\` | Linux 6.6-rt kernel, \`xImage\` for mmcblk0p5/p6 |"
     for v in $(variants_present); do
