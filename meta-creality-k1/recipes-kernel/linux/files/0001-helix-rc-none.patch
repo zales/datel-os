@@ -1,0 +1,44 @@
+Helix H.264 encoder: a rate-control choice that needs no blob
+
+The vendor driver offers two rate-control variants: one talks over netlink
+to a userspace server that neither NebulaOS nor the stock firmware ships,
+the other links the prebuilt h264e-rc/librc/librc.a_shipped. Every call
+into rate control sits behind #ifdef CONFIG_INGENIC_HELIX_H264E_RC_*, so a
+third choice that selects neither leaves the encoder running at the fixed
+QP of its parameters (h264e_rc.c, i_global_qp = 30). That is enough for a
+timelapse and keeps the kernel free of binaries. h264e_rc.c also needs
+EMC_SIZE, which only the netlink header defines; the same value is given
+for the new choice.
+
+Upstream-Status: Inappropriate [vendor driver, project policy]
+
+--- a/module_drivers/drivers/media/platform/ingenic-vcodec/Kconfig
++++ b/module_drivers/drivers/media/platform/ingenic-vcodec/Kconfig
+@@ -23,6 +23,13 @@
+ 	bool "H264E RC algrithom run in kernel"
+ 	help
+ 		RC algrithom run in kernel direct.
++
++config INGENIC_HELIX_H264E_RC_NONE
++	bool "No rate control (fixed QP)"
++	help
++		Every frame is encoded with the fixed QP of the encoder
++		parameters (i_global_qp, 30 by default). Needs neither the
++		netlink server in userspace nor the prebuilt librc.a.
+ endchoice
+ 
+ config INGENIC_FELIX
+--- a/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.h
++++ b/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.h
+@@ -12,6 +12,11 @@
+ 	#include "h264e-rc/librc/jzm_enc_api.h"
+ #endif
+ 
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++	/* Otherwise from api/helix_x264_enc.h: the EMC scratch buffer of the encoder. */
++	#define EMC_SIZE        (1 << 21)
++#endif
++
+ #include "helix_buf.h"
+ #include "h264e_rc_proto.h"
+ 

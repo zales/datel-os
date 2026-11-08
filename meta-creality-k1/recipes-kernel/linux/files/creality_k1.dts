@@ -180,3 +180,22 @@
 &i2c3 {
 	status = "disabled";
 };
+
+/* Helix video codec (H.264/JPEG encoder, JPEG decoder at 0x13200000) for the
+ * timelapse. It needs the shared DMA pool that halley5_v30.dts declares but
+ * leaves disabled: 32 MiB at 0x0e000000 on a 256 MiB board (reg-256M, picked
+ * by drivers/of/fdt.c from the DDR size). Stock reserves 36 MiB at 0x5000000
+ * for the same purpose (hardware/k1-stock.dts, reserved_mem@0x5000000). */
+&reserved_memory {
+	status = "okay";
+};
+
+&helix {
+	status = "okay";
+	memory-region = <&reserved_memory>;
+};
+
+/* Felix (H.264 decoder) has no use on the printer; its driver is not built. */
+&felix {
+	status = "disabled";
+};

@@ -1,0 +1,24 @@
+Helix H.264 encoder: do not redefine MAX and MIN
+
+Linux 6.6 defines MAX() and MIN() in linux/minmax.h, which every file of
+the driver includes before h264enc/slice.h. With -Werror the second
+definition stops the build. The driver's versions are the same
+expressions, so take the kernel's when it has them.
+
+Upstream-Status: Inappropriate [vendor driver]
+
+--- a/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264enc/slice.h
++++ b/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264enc/slice.h
+@@ -9,8 +9,12 @@
+ 	M_SLICE_TYPE_I  = 2,
+ };
+ 
++#ifndef MAX
+ #define MAX(X, Y) ((X) >= (Y) ? (X) : (Y))
++#endif
++#ifndef MIN
+ #define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
++#endif
+ 
+ #define QP_MAX_SPEC             (51)
+ 

@@ -1,0 +1,451 @@
+Helix H.264 encoder: frame setup and QP controls without rate control
+
+With CONFIG_INGENIC_HELIX_H264E_RC_NONE (patch 0001) h264e_encode() never
+built the slice header, the CABAC context or the VDMA descriptor of a
+frame: the vendor does that inside the two rate-control variants
+(h264e_rc_frame_start in librc, h264e_nl_rc_frame_start over netlink),
+so the VPU was started on an empty descriptor and no frame came out.
+
+This is the frame setup of the pre-rate-control helix/h264e.c of the
+same SDK, which the Makefile no longer builds, moved into h264e_rc.c
+behind the new choice. The QP of a frame is taken from the V4L2 controls
+V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP (IDR slices) and
+V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP (P slices), which helix_ops.c already
+stores in p->i_qp and p->p_qp but nothing consumed; both default to 30,
+the value the fixed i_global_qp had. The controls take effect on the
+next frame, so a userspace rate controller can steer the bitrate.
+
+Upstream-Status: Inappropriate [vendor driver, project policy]
+
+--- a/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.h
++++ b/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.h
+@@ -13,8 +13,8 @@
+ #endif
+ 
+ #ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
+-	/* Otherwise from api/helix_x264_enc.h: the EMC scratch buffer of the encoder. */
+-	#define EMC_SIZE        (1 << 21)
++	/* EMC_SIZE, the EMC partition sizes and H264E_SliceInfo_t. */
++	#include "api/helix_x264_enc.h"
+ #endif
+ 
+ #include "helix_buf.h"
+@@ -63,6 +63,9 @@
+ #ifdef CONFIG_INGENIC_HELIX_H264E_RC_IN_KERNEL
+ 	VPU_RC_S *rc;   // rc Instance.
+ #endif
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++	H264E_SliceInfo_t *s;   /* fixed-QP frame setup, see h264e_rc.c */
++#endif
+ 	/* 准备删除. */
+ 	struct h264e_params p;
+ 
+--- a/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.c
++++ b/module_drivers/drivers/media/platform/ingenic-vcodec/helix/h264e_rc.c
+@@ -26,7 +26,365 @@
+ 
+ static unsigned add_sps_pps_iframe = 1;
+ module_param(add_sps_pps_iframe, uint, S_IRUGO | S_IWUSR);
++
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++/*
++ * Fixed-QP frame setup, used when neither rate-control variant is built.
++ *
++ * The two vendor rate controls (netlink server, librc.a) also build the
++ * slice header, the CABAC context and the H264E_SliceInfo descriptor of
++ * every frame; without them h264e_encode() started the VPU on an empty
++ * descriptor. This is the frame setup of the pre-rate-control h264e.c of
++ * the same SDK, with the QP taken from the V4L2 controls
++ * V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP and V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP
++ * (p->i_qp, p->p_qp; both default to 30). Userspace can change them while
++ * streaming and so run its own rate control.
++ */
++static const uint8_t cqm_8iy_tab[64] = {
++	6 + 10, 10 + 10, 13 + 10, 16 + 10, 18 + 10, 23 + 10, 25 + 10, 27 + 10,
++	10 + 10, 11 + 10, 16 + 10, 18 + 10, 23 + 10, 25 + 10, 27 + 10, 29 + 10,
++	13 + 10, 16 + 10, 18 + 10, 23 + 10, 25 + 10, 27 + 10, 29 + 10, 31 + 10,
++	16 + 10, 18 + 10, 23 + 10, 25 + 10, 27 + 10, 29 + 10, 31 + 10, 33 + 10,
++	18 + 10, 23 + 10, 25 + 10, 27 + 10, 29 + 10, 31 + 10, 33 + 10, 36 + 10,
++	23 + 10, 25 + 10, 27 + 10, 29 + 10, 31 + 10, 33 + 10, 36 + 10, 38 + 10,
++	25 + 10, 27 + 10, 29 + 10, 31 + 10, 33 + 10, 36 + 10, 38 + 10, 40 + 10,
++	27 + 10, 29 + 10, 31 + 10, 33 + 10, 36 + 10, 38 + 10, 40 + 10, 42 + 10
++};
++static const uint8_t cqm_8py_tab[64] = {
++	9 + 10, 13 + 10, 15 + 10, 17 + 10, 19 + 10, 21 + 10, 22 + 10, 24 + 10,
++	13 + 10, 13 + 10, 17 + 10, 19 + 10, 21 + 10, 22 + 10, 24 + 10, 25 + 10,
++	15 + 10, 17 + 10, 19 + 10, 21 + 10, 22 + 10, 24 + 10, 25 + 10, 27 + 10,
++	17 + 10, 19 + 10, 21 + 10, 22 + 10, 24 + 10, 25 + 10, 27 + 10, 28 + 10,
++	19 + 10, 21 + 10, 22 + 10, 24 + 10, 25 + 10, 27 + 10, 28 + 10, 30 + 10,
++	21 + 10, 22 + 10, 24 + 10, 25 + 10, 27 + 10, 28 + 10, 30 + 10, 32 + 10,
++	22 + 10, 24 + 10, 25 + 10, 27 + 10, 28 + 10, 30 + 10, 32 + 10, 33 + 10,
++	24 + 10, 25 + 10, 27 + 10, 28 + 10, 30 + 10, 32 + 10, 33 + 10, 35 + 10
++};
++static const uint16_t rc_skin_ofst[4]        = {97, 183, 271, 884};
++static const uint8_t  rc_mult_factor[3]      = {3, 9, 5};
++static const int8_t   rc_skin_qp_ofst[4]     = {-6, -4, -2, 0};
++static const uint8_t  rc_skin_pxlu_thd[3][2] = {{100, 120}, {50, 100}, {120, 150}};
++static const uint8_t  rc_skin_pxlv_thd[3][2] = {{140, 175}, {125, 140}, {175, 225}};
++static const uint8_t  rc_shift_factor[3][3]  = {{3, 5, 8}, {4, 5, 6}, {4, 5, 6}};
++
++static void h264e_fixed_qp_fill_slice_info(struct h264e_ctx *ctx,
++        struct h264e_frame_start_params *p, int qp, unsigned int sh_size_in_bits)
++{
++	H264E_SliceInfo_t *s = ctx->s;
++	h264_sps_t *sps = &ctx->sps;
++	int i;
++
++	/* 1. what rate control would output */
++	s->mb_width             = sps->i_mb_width;
++	s->mb_height            = sps->i_mb_height;
++	s->frame_type           = ctx->sh.i_type == M_SLICE_TYPE_I ? 0 : 1;
++	s->first_mby            = 0;
++	s->last_mby             = s->mb_height - 1;
++	s->frame_width          = ctx->p.width;
++	s->frame_height         = ctx->p.height;
++	s->qp                   = qp;
++	s->base_qp              = qp;
++	s->max_qp               = ctx->p.h264_max_qp;
++	s->min_qp               = ctx->p.h264_min_qp;
++
++	s->bs_head_en           = 1;    /* X2000: fixed */
++	s->bs_head_va           = (paddr_t *)ctx->slice_header;
++	s->bs_head_len          = (sh_size_in_bits + 7) / 8;
++	s->bs_rbsp_en           = 1;
++
++	/* 2. motion estimation */
++	memset(s->frm_re, 0, sizeof(s->frm_re));
++	s->pskip_en                 = 1;
++	s->mref_en                  = 0;
++	s->scl                      = 3;
++	s->hpel_en                  = 1;
++	s->qpel_en                  = 1;
++	s->ref_mode                 = 1;
++	s->max_sech_step_i          = 63;
++	s->max_mvrx_i               = 255;
++	s->max_mvry_i               = 255;
++	s->lambda_scale_parameter   = 8;
++	if (s->mb_width > 50 && s->mb_height > 38) {
++		s->fs_en = 1;
++		s->fs_md = 0;
++		s->fs_px = 3;
++		s->fs_py = 3;
++		s->fs_rx = 8;
++		s->fs_ry = 8;
++	} else {
++		s->fs_en = 0;
++		s->fs_md = 0;
++		s->fs_px = 0;
++		s->fs_py = 0;
++		s->fs_rx = 0;
++		s->fs_ry = 0;
++	}
++	s->frm_mv_en            = 1;
++	s->frm_mv_size          = 3;
++	s->glb_mv_en            = 1;
++	s->glb_mvx              = 0;
++	s->glb_mvy              = 0;
++	s->me_step_en           = 1;
++	s->me_step_0            = 8;
++	s->me_step_1            = 10;
++
++	/* 3. quantisation */
++	s->dct8x8_en = 0;
++	memset(s->scaling_list, 0x10, sizeof(s->scaling_list));
++	memcpy(s->scaling_list8[0], cqm_8iy_tab, sizeof(cqm_8iy_tab));
++	memcpy(s->scaling_list8[1], cqm_8py_tab, sizeof(cqm_8py_tab));
++	s->deadzone[0] = 0x15;
++	s->deadzone[1] = 0x0b;
++	s->deadzone[2] = 0x15;
++	s->deadzone[3] = 0x0b;
++	s->deadzone[4] = 0x15;
++	s->deadzone[5] = 0x0b;
++	s->deadzone[6] = 0x15;
++	s->deadzone[7] = 0x15;
++	s->deadzone[8] = 0x0b;
++
++	/* 4. loop filter */
++	s->deblock          = ctx->p.deblock;
++	s->rotate           = 0;
++	s->alpha_c0_offset  = 0;
++	s->beta_offset      = 0;
++
++	/* 5. mode decision */
++	s->acmask_mode              = 0x3fffe;
++	s->intra_mode_msk           = 0;
++	s->i_4x4_dis                = 0;
++	s->i_8x8_dis                = 0;
++	s->i_16x16_dis              = 0;
++	s->p_l0_dis                 = 0;
++	s->p_t8_dis                 = 0;
++	s->p_skip_dis               = 0;
++	s->p_skip_pl0f_dis          = 0;
++	s->p_skip_pt8f_dis          = 0;
++	s->cost_bias_en             = 0;
++	s->cost_bias_i_4x4          = 0;
++	s->cost_bias_i_8x8          = 0;
++	s->cost_bias_i_16x16        = 0;
++	s->cost_bias_p_l0           = 0;
++	s->cost_bias_p_t8           = 0;
++	s->cost_bias_p_skip         = 0;
++	s->intra_lambda_y_bias_en   = 0;
++	s->intra_lambda_c_bias_en   = 0;
++	s->intra_lambda_bias_qp0    = 0;
++	s->intra_lambda_bias_qp1    = 0;
++	s->intra_lambda_bias_0      = 0;
++	s->intra_lambda_bias_1      = 0;
++	s->intra_lambda_bias_2      = 0;
++	s->chroma_sse_bias_en       = 0;
++	s->chroma_sse_bias_qp0      = 0;
++	s->chroma_sse_bias_qp1      = 0;
++	s->chroma_sse_bias_0        = 0;
++	s->chroma_sse_bias_1        = 0;
++	s->chroma_sse_bias_2        = 0;
++	s->sse_lambda_bias_en       = 0;
++	s->sse_lambda_bias          = 0;
++	s->fbc_ep                   = 204;
++	s->jm_lambda2_en            = 0;
++	s->inter_nei_en             = 0;
++	s->skip_bias_en             = 0;
++	s->ysse_thr                 = 0;
++	s->csse_thr                 = 0;
++	s->dcm_en                   = 0;
++	s->dcm_param                = 0x4304;
++	s->sde_prior                = 5;
++	s->db_prior                 = 5;
++	s->use_intra_in_pframe      = 1;
++	s->use_fast_mvp             = 1;
++	s->skip_en                  = 1;
++	s->cqp_offset               = 0;
++	s->daisy_chain_en           = 0;
++	s->curr_thread_id           = 0;
++	s->qp_tab_mode              = 0;
++	s->qp_tab_en                = 0;
++	s->bs_size_en               = 0;
++	s->bs_size                  = 0;
++	s->size_mode                = 0;
++	s->step_mode                = 0;
++	s->mode_ctrl                = 0;
++	memset(s->mode_ctrl_param, 0, sizeof(s->mode_ctrl_param));
++
++	/* 6. hardware output */
++	s->info_en              = 1;
++	s->mvd_sum_all          = 0;
++	s->mvd_sum_abs          = 0;
++	s->mv_sum_all           = 1;
++	s->mv_sum_abs           = 1;
++	s->cfg_size_x           = 1;
++	s->cfg_size_y           = 1;
++	s->cfg_iw_thr           = 0;
++	s->cfg_mvr_thr1         = 0;
++	s->cfg_mvr_thr2         = 0;
++	s->cfg_mvr_thr3         = 0;
++
++	/* 7. intra prediction bit and lambda control */
++	s->mb_mode_val          = 1;
++	s->bit_16_en            = 0;
++	s->bit_8_en             = 1;
++	s->bit_4_en             = 1;
++	s->bit_uv_en            = 0;
++	s->lamb_16_en           = 0;
++	s->lamb_8_en            = 0;
++	s->lamb_4_en            = 0;
++	s->lamb_uv_en           = 0;
++	s->c_16_en              = 0;
++	s->c_8_en               = 0;
++	s->c_4_en               = 0;
++	s->c_uv_en              = 0;
++	s->pri_16               = 0;
++	s->pri_8                = 0;
++	s->pri_4                = 0;
++	s->pri_uv               = 0;
++	s->ref_neb_4            = 1;
++	s->ref_neb_8            = 1;
++	s->lambda_info16        = 0;
++	s->lambda_info8         = 0;
++	s->lambda_info4         = 0;
++	s->lambda_infouv        = 0;
++	s->ref_4                = 4;
++	s->ref_8                = 3;
++	memset(s->bit_16,   0, sizeof(s->bit_16));
++	memset(s->bit_uv,   0, sizeof(s->bit_uv));
++	for (i = 0; i < 4; ++i) {
++		s->bit_4[i] = 4;
++		s->bit_8[i] = 4;
++	}
++	memset(s->const_16, 0, sizeof(s->const_16));
++	memset(s->const_uv, 0, sizeof(s->const_uv));
++	memset(s->const_4,  0, sizeof(s->const_4));
++	memset(s->const_8,  0, sizeof(s->const_8));
++
++	/* 9. reference frame compression: off */
++	s->jrfcd_flag = 0;
++	s->jrfc_enable = 0;
++	s->jrfd_enable = 0;
++	s->lm_head_total = ((ctx->p.width + 31) >> 5) * ((ctx->p.height + 15) >> 4);
++	s->cm_head_total = ((ctx->p.width + 63) >> 6) * ((ctx->p.height + 15) >> 4);
++
++	/* 11. skin detection: off, tables as in the vendor code */
++	s->skin_dt_en     = 0;
++	s->skin_lvl       = 0;
++	s->skin_cnt_thd   = 20;
++	s->ncu_mov_en     = 0;
++	s->ncu_move_len   = 20;
++	s->ncu_move_info  = NULL;
++	s->buf_share_en   = 0;
++	s->buf_share_size = 0;
++	s->frame_idx      = 0;
++	memcpy(s->skin_pxlu_thd, rc_skin_pxlu_thd, sizeof(s->skin_pxlu_thd));
++	memcpy(s->skin_pxlv_thd, rc_skin_pxlv_thd, sizeof(s->skin_pxlv_thd));
++	memcpy(s->skin_qp_ofst,  rc_skin_qp_ofst,  sizeof(s->skin_qp_ofst));
++	memcpy(s->mult_factor,   rc_mult_factor,   sizeof(s->mult_factor));
++	memcpy(s->shift_factor,  rc_shift_factor,  sizeof(s->shift_factor));
++	memcpy(s->skin_ofst,     rc_skin_ofst,     sizeof(s->skin_ofst));
++
++	/* no macroblock rate control, no ROI, no QP table */
++	s->rc_mb_en = 0;
++	s->mb_mode_use = 0;
++	s->force_i16dc = 0;
++	s->force_i16 = 0;
++
++	s->state        = ctx->cb.state;
++	s->raw_format   = p->raw_format;
++	s->stride[0]    = p->stride[0];
++	s->stride[1]    = p->stride[1];
++	for (i = 0; i < 3; i++) {
++		s->raw[i] = p->raw[i];
++		s->fb[i][0] = p->fb[i][0];
++		s->fb[i][1] = p->fb[i][1];
++	}
++
++	s->des_va   = ctx->desc;
++	s->des_pa   = ctx->desc_pa;
++
++	s->emc_bs_pa = p->emc_bs_pa;
++
++	s->emc_dblk_va  = ctx->emc_buf;
++	s->emc_recon_va = s->emc_dblk_va + DBLK_SIZE;
++	s->emc_mv_va    = s->emc_recon_va + RECON_SIZE;
++	s->emc_se_va    = s->emc_mv_va + MV_SIZE;
++	s->emc_qpt_va   = s->emc_se_va + SE_SIZE;
++	s->emc_rc_va    = s->emc_qpt_va + QPT_SIZE;
++	s->emc_cpx_va   = s->emc_rc_va + RC_SIZE;
++	s->emc_mod_va   = s->emc_cpx_va + CPX_SIZE;
++	s->emc_sad_va   = s->emc_mod_va + MOD_SIZE;
++	s->emc_ncu_va   = s->emc_sad_va + SAD_SIZE;
+ 
++	s->emc_dblk_pa  = p->emc_dblk_pa;
++	s->emc_recon_pa = s->emc_dblk_pa + DBLK_SIZE;
++	s->emc_mv_pa    = s->emc_recon_pa + RECON_SIZE;
++	s->emc_se_pa    = s->emc_mv_pa + MV_SIZE;
++	s->emc_qpt_pa   = s->emc_se_pa + SE_SIZE;
++	s->emc_rc_pa    = s->emc_qpt_pa + QPT_SIZE;
++	s->emc_cpx_pa   = s->emc_rc_pa + RC_SIZE;
++	s->emc_mod_pa   = s->emc_cpx_pa + CPX_SIZE;
++	s->emc_sad_pa   = s->emc_mod_pa + MOD_SIZE;
++	s->emc_ncu_pa   = s->emc_sad_pa + SAD_SIZE;
++}
++
++static int h264e_fixed_qp_frame_start(struct h264e_ctx *ctx, struct h264e_frame_start_params *p)
++{
++	h264_pps_t *pps = &ctx->pps;
++	int i_nal_type, i_nal_ref_idc;
++	unsigned int sh_bits;
++	int qp;
++	bs_t bs;
++
++	if (!ctx->s) {
++		return -EINVAL;
++	}
++
++	if (p->bIFrmReq) {
++		i_nal_type = NAL_SLICE_IDR;
++		i_nal_ref_idc = NAL_PRIORITY_HIGHEST;
++		ctx->sh.i_type = M_SLICE_TYPE_I;
++		qp = ctx->p.i_qp;
++	} else {
++		i_nal_type = NAL_SLICE;
++		i_nal_ref_idc = NAL_PRIORITY_HIGH;
++		ctx->sh.i_type = M_SLICE_TYPE_P;
++		qp = ctx->p.p_qp;
++	}
++	qp = clamp(qp, 0, 51);
++
++	if (i_nal_type == NAL_SLICE_IDR) {
++		h264e_slice_header_init(&ctx->sh, &ctx->sps, pps, ctx->p.i_idr_pic_id, ctx->i_frame, qp);
++		ctx->p.i_idr_pic_id ^= 1;
++	} else {
++		h264e_slice_header_init(&ctx->sh, &ctx->sps, pps, -1, ctx->i_frame, qp);
++		ctx->sh.i_num_ref_idx_l0_active = 1;
++		ctx->sh.i_num_ref_idx_l1_active = 1;
++	}
++
++	/* NAL start code (the 0xFF is patched to 0x00 after encoding) and header */
++	bs_init(&bs, ctx->slice_header, MAX_SLICE_HEADER_SIZE);
++	bs_write(&bs, 8, 0x00);
++	bs_write(&bs, 8, 0xFF);
++	bs_write(&bs, 8, 0x00);
++	bs_write(&bs, 8, 0x01);
++	bs_write(&bs, 8, (0 << 7 | (i_nal_ref_idc << 5) | (i_nal_type)));
++
++	h264e_slice_header_write(&bs, &ctx->sh, i_nal_ref_idc);
++
++	if (pps->b_cabac) {
++		bs_align_1(&bs);
++		h264_cabac_context_init(&ctx->cb, ctx->sh.i_type, ctx->sh.i_qp, ctx->sh.i_cabac_init_idc);
++	}
++
++	sh_bits = bs_pos(&bs);
++	p->slice_header_len = (sh_bits + 7) / 8;
++
++	h264e_fixed_qp_fill_slice_info(ctx, p, ctx->sh.i_qp, sh_bits);
++
++	H264E_SliceInit(ctx->s);
++
++	return 0;
++}
++#endif /* CONFIG_INGENIC_HELIX_H264E_RC_NONE */
++
+ #define MAX_REF_FRAMES  1
+ #define NUM_WORK_BUFFERS (MAX_REF_FRAMES + 1)
+ 
+@@ -498,6 +856,13 @@
+ 	h264e_rc_frame_start(ctx, &p);
+ #endif
+ 
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++	ret = h264e_fixed_qp_frame_start(ctx, &p);
++	if (ret < 0) {
++		return ret;
++	}
++#endif
++
+ 	dma_sync_single_for_device(venc_ctx->dev->dev, ctx->desc_pa, ctx->vdma_chain_len, DMA_TO_DEVICE);
+ 
+ 	/*2. 启动编码器硬件，开始编码*/
+@@ -634,6 +999,15 @@
+ #endif
+ #ifdef CONFIG_INGENIC_HELIX_H264E_RC_IN_KERNEL
+ 	ret = h264e_rc_ctx_init(ctx);
++#endif
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++	if (!ctx->s) {
++		ctx->s = kzalloc(sizeof(H264E_SliceInfo_t), GFP_KERNEL);
++	}
++	if (!ctx->s) {
++		ret = -ENOMEM;
++	}
++	h264_cabac_init();
+ #endif
+ 
+ 	return ret;
+@@ -667,6 +1041,10 @@
+ #ifdef CONFIG_INGENIC_HELIX_H264E_RC_IN_KERNEL
+ 	h264e_rc_ctx_free(ctx);
+ #endif
++#ifdef CONFIG_INGENIC_HELIX_H264E_RC_NONE
++	kfree(ctx->s);
++	ctx->s = NULL;
++#endif
+ 
+ 	return 0;
+ }

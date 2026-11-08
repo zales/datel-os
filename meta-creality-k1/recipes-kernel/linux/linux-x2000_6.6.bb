@@ -13,6 +13,9 @@ inherit kernel
 SRC_URI = "git://github.com/NebulaOS-KE/NebulaOS-kernel.git;protocol=https;branch=openke \
            file://creality_k1.dts \
            file://k1.cfg \
+           file://0001-helix-rc-none.patch \
+           file://0002-helix-no-MAX-MIN-redefinition.patch \
+           file://0003-helix-rc-none-frame-setup.patch \
           "
 SRCREV = "d86790d2e23178e52054c71562f9c40994a5469b"
 S = "${WORKDIR}/git/kernel/kernel-6.6"
@@ -62,7 +65,8 @@ do_configure:append() {
 # Fail the build if the K1 settings did not survive olddefconfig.
 do_configure:append() {
     for opt in CONFIG_DT_X2000_MODULE_BASE=y 'CONFIG_DT_X2000_MODULE_BASE_DTS_FILE="x2000/creality_k1.dts"' \
-               CONFIG_SQUASHFS_XZ=y CONFIG_TOUCHSCREEN_GOODIX=y CONFIG_BRCMFMAC=m 'CONFIG_EXTRA_FIRMWARE=""'; do
+               CONFIG_SQUASHFS_XZ=y CONFIG_TOUCHSCREEN_GOODIX=y CONFIG_BRCMFMAC=m 'CONFIG_EXTRA_FIRMWARE=""' \
+               CONFIG_VIDEO_INGENIC_VCODEC=y CONFIG_INGENIC_HELIX=y CONFIG_INGENIC_HELIX_H264E_RC_NONE=y; do
         grep -qx "$opt" ${B}/.config || bbfatal "kernel config is missing $opt"
     done
 }
