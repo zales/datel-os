@@ -19,6 +19,8 @@ docker volume create k1yocto-work >/dev/null
 docker run --rm -u root --cpu-shares 512 -v k1yocto-work:/work -v "$HERE":/src:ro \
   -e TARGET="$TARGET" -e KAS_FILE="$KAS_FILE" -e JOBS="$JOBS" \
   --entrypoint bash ghcr.io/siemens/kas/kas:4.7 -c '
+    # A fresh copy of the layer: files deleted in the source must not linger in the volume.
+    rm -rf /work/k1-yocto/meta-creality-k1
     mkdir -p /work/k1-yocto/meta-creality-k1
     cp -r /src/meta-creality-k1/. /work/k1-yocto/meta-creality-k1/
     cp /src/kas-creality-k1*.yml /work/k1-yocto/
@@ -28,7 +30,7 @@ docker run --rm -u root --cpu-shares 512 -v k1yocto-work:/work -v "$HERE":/src:r
         kas shell $KAS_FILE -c \"bitbake $TARGET\"" \
       > /work/k1-yocto/build-last.log 2>&1
     rc=$?
-    grep -E "^(ERROR|WARNING)|Tasks Summary" /work/k1-yocto/build-last.log | tail -20
+    grep -a -E "^(ERROR|WARNING)|Tasks Summary" /work/k1-yocto/build-last.log | tail -20
     echo "bitbake exit: $rc"
     ls -la /work/k1-yocto/build/tmp/deploy/images/creality-k1/ | grep -E "\.img$|squashfs-xz$|xImage$" || true
     exit $rc'
