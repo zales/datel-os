@@ -2,7 +2,7 @@
 
 # Datel OS
 
-Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, Klipper (Creality's fork or Kalico with open MCU firmware), Moonraker, Mainsail, camera streaming, hardware-encoded timelapse and Twitch live streaming. The stock bootloader stays in place and the second eMMC slot always holds a way back.
+Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, Kalico with open firmware for all three MCUs, Moonraker, Mainsail, camera streaming, hardware-encoded timelapse and Twitch live streaming. The stock bootloader stays in place and the second eMMC slot always holds a way back.
 
 **Pre-release for developers.** Version 0.2.0 runs and prints on the author's K1 in both A/B slots. The display does not work yet, recovery from a kernel that fails to boot needs a USB cable, and everything is verified on one printer. Read [Limitations](#limitations) before installing.
 
