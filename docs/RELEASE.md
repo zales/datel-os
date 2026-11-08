@@ -1,6 +1,8 @@
 # Datel OS releases
 
-A release is a tag `vX.Y.Z` in this repository. The workflow `.github/workflows/release.yml` builds both image variants from it, checks them and publishes them as a GitHub Release with notes generated from the commits since the previous tag. All steps are done by `tools/release.sh`, so the same can be run by hand.
+Development happens in the private repository `zales/k1-yocto`; the public repository [`zales/datel-os`](https://github.com/zales/datel-os) receives the code and the images at every release. A release is a tag `vX.Y.Z` in the private repository. The workflow `.github/workflows/release.yml` builds both image variants from it, checks them, pushes the tagged commit with its history and the tag to the public repository's `main`, and creates the GitHub Release there with notes generated from the commits since the previous tag. All steps are done by `tools/release.sh`, so the same can be run by hand.
+
+**Token.** The workflow writes to the public repository with the secret `DATEL_OS_TOKEN` of the private repository: a fine-grained personal access token (GitHub, Settings, Developer settings, Fine-grained tokens) with *Repository access* limited to `datel-os` and the permission *Contents: Read and write*. Set it with `gh secret set DATEL_OS_TOKEN -R zales/k1-yocto`. Without it the `publish` job stops before touching anything. The mirrored workflow file never runs in the public repository (every job checks the repository name).
 
 ## What a release contains
 
@@ -79,14 +81,14 @@ TAG=v0.3.0 tools/release.sh notes > /tmp/notes.md && gh release create v0.3.0 re
 
 ## Installing on the printer
 
-Datel OS is written into the slot the printer is not running from: from stock (slot 1) into slot 2 (`mmcblk0p6` + `mmcblk0p8`), from a running Datel OS into the other slot according to `SLOT=`. The procedure is the same as in the README, only the files come from the Release.
+Datel OS is written into the slot the printer is not running from: from stock (slot 1) into slot 2 (`mmcblk0p6` + `mmcblk0p8`), from a running Datel OS into the other slot according to `SLOT=`. The full procedure with backup, trial boot and recovery is in [INSTALL.md](INSTALL.md); this section is the short form with files from the Release.
 
 **Prerequisite:** root over SSH on the printer with the key `~/.ssh/k1_printer_ecdsa`. On stock the key is copied once with `ssh-copy-id -i ~/.ssh/k1_printer_ecdsa.pub root@<ip>` (Creality gives the stock root password in its rooting guide); Datel OS then takes it over from `/usr/data/k1os/ssh/authorized_keys`. The printer must not be printing.
 
 1. Download the release files and verify the checksums:
 
 ```bash
-gh release download v0.3.0 -R zales/k1-yocto -D dl/ && (cd dl && shasum -a 256 -c SHA256SUMS)
+gh release download v0.3.0 -R zales/datel-os -D dl/ && (cd dl && shasum -a 256 -c SHA256SUMS)
 ```
 
 2. Write, verify and switch the marker. From stock into slot 2 (`PRINTER=root@<ip>`):
@@ -105,7 +107,7 @@ KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINT
 
 4. On the first start after a warm restart from stock into Datel OS the main MCU stays in shutdown and Klipper reports a configuration error; one `FIRMWARE_RESTART` sorts it out. Between two Datel OS slots this does not happen.
 
-The `kalico` variant loads its own firmware into all three MCUs on the first cold start (about 10 s); on the way back stock reflashes the MCU firmware itself. Details on probe calibration and input shaping are in the README.
+The `kalico` variant loads its own firmware into all three MCUs on the first cold start (about 10 s); on the way back stock reflashes the MCU firmware itself. Details on probe calibration and input shaping are in [KALICO.md](KALICO.md).
 
 **Datel OS in both slots.** Once you overwrite the second slot too, stock disappears from the printer and A/B serves Datel OS alone. Back up the stock partitions p1–p5 and p7 first (`ssh root@<ip> dd if=/dev/mmcblk0pN bs=1M > mmcblk0pN.bin`, about 330 MB, compare the MD5 with `md5sum /dev/mmcblk0pN` on the printer); the way back to stock is writing those files back from a running Datel OS. Without stock on the printer the display does not work (Datel OS has no panel driver yet).
 

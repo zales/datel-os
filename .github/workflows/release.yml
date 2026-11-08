@@ -1,11 +1,16 @@
-# Datel OS firmware release. A tag vX.Y.Z builds both image variants on the
-# self-hosted runner (the Mac with Docker Desktop and the k1yocto-work volume,
-# label "k1-yocto") and publishes them as a GitHub Release from a GitHub-hosted
-# runner. The steps are tools/release.sh; docs/RELEASE.md has the runner setup,
-# the manual fallback and the install steps for the printer.
+# Datel OS firmware release. A tag vX.Y.Z in the development repository
+# (zales/k1-yocto, private) builds both image variants on the self-hosted
+# runner (label "k1-yocto") and publishes them to the public repository
+# zales/datel-os: the tagged commit and its history go to its main branch and
+# the tag, the images become a GitHub Release there. The steps are
+# tools/release.sh; docs/RELEASE.md has the runner setup, the token and the
+# manual fallback.
 #
 # The release carries the kernel, the root filesystem and the OTA package only.
 # tools/release.sh check refuses anything else, bootloader and RTOS included.
+#
+# The workflow file is mirrored with the code; the "if" on every job keeps it
+# from running in the public repository.
 name: Release firmware
 
 on:
@@ -19,7 +24,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -27,10 +32,12 @@ concurrency:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
+  PUBLIC_REPO: zales/datel-os
 
 jobs:
   build:
     name: Build images on the self-hosted runner
+    if: github.repository == 'zales/k1-yocto'
     runs-on: [self-hosted, k1-yocto]
     timeout-minutes: 720
     steps:
@@ -58,7 +65,8 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish the GitHub Release
+    name: Mirror the code and publish the release in the public repository
+    if: github.repository == 'zales/k1-yocto'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -83,15 +91,31 @@ jobs:
       - name: Release notes from the commits since the previous tag
         run: tools/release.sh notes | tee "$RUNNER_TEMP/notes.md"
 
-      - name: Create or refresh the release
+      - name: Token for the public repository
         env:
-          GH_TOKEN: ${{ github.token }}
+          DATEL_OS_TOKEN: ${{ secrets.DATEL_OS_TOKEN }}
+        run: |
+          [ -n "$DATEL_OS_TOKEN" ] || { echo "::error::secret DATEL_OS_TOKEN is missing (fine-grained PAT with Contents: read and write on $PUBLIC_REPO)"; exit 1; }
+
+      - name: Push the tagged commit, its history and the tag to the public repository
+        env:
+          DATEL_OS_TOKEN: ${{ secrets.DATEL_OS_TOKEN }}
+        run: |
+          url="https://x-access-token:${DATEL_OS_TOKEN}@github.com/${PUBLIC_REPO}.git"
+          sha=$(git rev-parse "$TAG^{commit}")
+          git push "$url" "refs/tags/$TAG:refs/tags/$TAG"
+          # main follows the newest tag; an older tag published again must not move it back
+          git push "$url" "$sha:refs/heads/main" || echo "main in $PUBLIC_REPO is ahead of $TAG, left as it is"
+
+      - name: Create or refresh the release in the public repository
+        env:
+          GH_TOKEN: ${{ secrets.DATEL_OS_TOKEN }}
         run: |
           flags=(--title "Datel OS $TAG" --notes-file "$RUNNER_TEMP/notes.md")
           case "$TAG" in *-*) flags+=(--prerelease) ;; esac
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" release/* --clobber
-            gh release edit "$TAG" "${flags[@]}"
+          if gh release view "$TAG" -R "$PUBLIC_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* -R "$PUBLIC_REPO" --clobber
+            gh release edit "$TAG" -R "$PUBLIC_REPO" "${flags[@]}"
           else
-            gh release create "$TAG" release/* --verify-tag "${flags[@]}"
+            gh release create "$TAG" release/* -R "$PUBLIC_REPO" --verify-tag "${flags[@]}"
           fi

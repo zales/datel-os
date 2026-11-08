@@ -26,7 +26,7 @@ RELEASE_DIR="${RELEASE_DIR:-$HERE/release}"
 VOLUME="${VOLUME:-k1yocto-work}"
 DEPLOY=/work/k1-yocto/build/tmp/deploy/images/creality-k1
 BOARD=CR4CU220812S11
-REPO_URL=https://github.com/zales/k1-yocto
+REPO_URL=https://github.com/zales/datel-os
 KERNEL_SLOT=$((8 * 1024 * 1024))      # mmcblk0p5 / p6
 ROOTFS_SLOT=$((300 * 1024 * 1024))    # mmcblk0p7 / p8
 
@@ -201,7 +201,7 @@ notes() {
     done
     echo "| \`SHA256SUMS\` | checksums of all files |"
     echo
-    echo "Installation is described in [docs/RELEASE.md]($REPO_URL/blob/$TAG/docs/RELEASE.md). The package holds only the kernel and the system and is written into the inactive slot; the bootloader, the RTOS and partition \`mmcblk0p9\` are not touched. Datel OS boots in trial mode: until you run \`k1os-slot keep\`, a power cycle brings the previous system back."
+    echo "Installation is described in [docs/INSTALL.md]($REPO_URL/blob/$TAG/docs/INSTALL.md). The package holds only the kernel and the system and is written into the inactive slot; the bootloader, the RTOS and partition \`mmcblk0p9\` are not touched. Datel OS boots in trial mode: until you run \`k1os-slot keep\`, a power cycle brings the previous system back."
     echo
     if [ -n "$prev" ]; then
         echo "## Changes since $prev"
