@@ -8,9 +8,12 @@ Type=simple
 ExecStart=/usr/libexec/k1os/twitch
 Restart=on-failure
 RestartSec=15
-# The wrapper tears the pipeline down itself on SIGTERM (ustreamer-dump may
-# linger otherwise) and exits 0; the timeout is only a backstop.
-TimeoutStopSec=5
+# The wrapper tears the pipeline down itself on SIGTERM: producers first, then
+# up to 4 s for ffmpeg to close the RTMP session by itself, and exits 0. Only
+# the wrapper gets the SIGTERM (mixed): one sent to ffmpeg too makes it drop
+# the session instead of closing it. The timeout is only a backstop.
+KillMode=mixed
+TimeoutStopSec=10
 SuccessExitStatus=143
 # The key stays in twitch.env (root, 0600); nothing here or in the logs names it.
 Nice=5

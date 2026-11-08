@@ -69,15 +69,24 @@ run_stream | /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin \
     -rtmp_app "${INGEST##*/}" -rtmp_playpath "$TWITCH_KEY" -f flv "${INGEST%/*}/" &
 pipe=$!
 
-# A stop (SIGTERM from systemd) ends the pipeline here: ustreamer-dump does
-# not always leave on SIGTERM while it waits for the sink, and the unit must
-# end as inactive, not failed, or Moonraker waits on it.
+# A stop (SIGTERM from systemd, KillMode=mixed: only this shell gets it) ends
+# the pipeline here, producers first: k1os-stream leaves on SIGTERM and closes
+# its output, ffmpeg sees the end of the video (-shortest), writes the FLV
+# trailer, closes the RTMP session and exits by itself, and Twitch takes the
+# channel offline at once. A signal to ffmpeg instead cuts that short ("Error
+# writing trailer: Immediate exit requested", or ffmpeg hangs after "Exiting
+# normally"), and Twitch shows a dropped connection for another minute or two;
+# ffmpeg gets one only when it has not left after 4 s. ustreamer-dump does not
+# always leave on SIGTERM while it waits for the sink. The unit must end as
+# inactive, not failed, or Moonraker waits on it.
 stopping=
 on_stop() {
     trap "" TERM INT
     stopping=1
-    kill -TERM $pipe $(pidof ustreamer-dump k1os-stream) 2>/dev/null
-    sleep 1
+    kill -TERM $(pidof k1os-stream ustreamer-dump) 2>/dev/null
+    n=0
+    while [ $n -lt 40 ] && kill -0 $pipe 2>/dev/null; do sleep 0.1; n=$((n + 1)); done
+    kill -0 $pipe 2>/dev/null && kill -TERM $pipe
     kill -KILL $(pidof ustreamer-dump) 2>/dev/null
 }
 trap on_stop TERM INT
