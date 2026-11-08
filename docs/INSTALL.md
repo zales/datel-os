@@ -5,7 +5,7 @@ Datel OS is written over SSH into the eMMC slot the printer is not running from.
 ## Before you start
 
 - A K1 with mainboard CR4CU220812S11 or S12 running stock firmware 1.3.x. Verified on one printer; see [Limitations](../README.md#limitations).
-- Root over SSH on stock. Creality publishes the root password in its rooting guide. Copy your key once; Datel OS takes it over from `/usr/data/k1os/ssh/authorized_keys`:
+- Root over SSH on stock. Creality publishes the root password in its rooting guide; Datel OS keeps the same root password, so `ssh root@<ip>` with it works on both slots. The scripts run without a prompt, so copy your key once; Datel OS takes it over from `/usr/data/k1os/ssh/authorized_keys`:
 
 ```bash
 ssh-copy-id -i ~/.ssh/k1_printer_ecdsa.pub root@<ip>

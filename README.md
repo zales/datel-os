@@ -27,7 +27,7 @@ Ordered by how much it hurts.
 
 1. **No display.** Datel OS has no panel driver. Control the printer through Mainsail, OrcaSlicer or SSH.
 2. **No automatic fallback from a kernel that does not boot.** The stock SPL has no boot counter. The trial boot protects from the first systemd service on; a kernel that hangs before that needs the USB mask-ROM boot ([tools/usbboot/README.md](tools/usbboot/README.md)), not yet verified on the S12 board.
-3. **Installation needs root over SSH on stock.** Creality publishes the stock root password in its rooting guide.
+3. **Installation needs root over SSH on stock.** Creality publishes the stock root password in its rooting guide. Datel OS keeps the same root password, so it opens both slots.
 4. **MCU firmware changes only on a cold start.** When moving between stock and Datel OS, power the printer off and on.
 5. **Verified on one printer:** board CR4CU220812S11, panel `lcm_id=3`.
 6. **Wi-Fi is 2.4 GHz only.** The camera stream can saturate a weak link; the default is 8 fps.

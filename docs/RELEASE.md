@@ -82,7 +82,7 @@ TAG=v0.3.0 tools/release.sh notes > /tmp/notes.md && gh release create v0.3.0 re
 
 Datel OS is written into the slot the printer is not running from: from stock (slot 1) into slot 2 (`mmcblk0p6` + `mmcblk0p8`), from a running Datel OS into the other slot according to `SLOT=`. The full procedure with backup, trial boot and recovery is in [INSTALL.md](INSTALL.md); this section is the short form with files from the Release.
 
-**Prerequisite:** root over SSH on the printer with the key `~/.ssh/k1_printer_ecdsa`. On stock the key is copied once with `ssh-copy-id -i ~/.ssh/k1_printer_ecdsa.pub root@<ip>` (Creality gives the stock root password in its rooting guide); Datel OS then takes it over from `/usr/data/k1os/ssh/authorized_keys`. The printer must not be printing.
+**Prerequisite:** root over SSH on the printer with the key `~/.ssh/k1_printer_ecdsa`. On stock the key is copied once with `ssh-copy-id -i ~/.ssh/k1_printer_ecdsa.pub root@<ip>` (Creality gives the stock root password in its rooting guide; Datel OS keeps the same root password); Datel OS then takes the key over from `/usr/data/k1os/ssh/authorized_keys`. The printer must not be printing.
 
 1. Download the release files and verify the checksums:
 

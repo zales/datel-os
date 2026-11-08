@@ -1,9 +1,16 @@
 SUMMARY = "Datel OS: open-source firmware image for the Creality K1"
 LICENSE = "MIT"
 
-inherit core-image
+inherit core-image extrausers
 
 IMAGE_FEATURES += "read-only-rootfs ssh-server-openssh"
+
+# Root keeps the stock firmware's password (the hash is copied from /etc/shadow of
+# the stock rootfs on mmcblk0p7; Creality publishes the password in its rooting guide),
+# so one password opens both slots. The root is read-only: passwd cannot change it
+# on the printer, only here. The hash goes through a double-quoted shell string in
+# extrausers.bbclass, so every $ is escaped or the shell eats $5, $do2Fx5 and $8.
+EXTRA_USERS_PARAMS = "usermod -p '\$5\$do2Fx5.o9ndk\$8EchNjZMu2F.uTPtRnsr8QiZOFfS488o7dz9cjsMO66' root;"
 
 IMAGE_INSTALL = " \
     packagegroup-core-boot \
