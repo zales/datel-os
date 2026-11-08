@@ -31,24 +31,22 @@ The script runs from the repository checkout. `PRINTER` is the SSH target, `KEY`
 1. Check: the right slot runs, the marker is as expected, nothing prints, the images fit the partitions.
 
 ```bash
-KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-kalico.squashfs PRINTER=root@<ip> tools/flash-slot2.sh
+KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-rootfs.squashfs PRINTER=root@<ip> tools/flash-slot2.sh
 ```
 
 2. Write both partitions, read them back and compare the MD5. The marker is not touched.
 
 ```bash
-KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-kalico.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --write
+KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-rootfs.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --write
 ```
 
 3. Point the boot marker in `mmcblk0p1` at the new slot.
 
 ```bash
-KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-kalico.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --switch
+KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-rootfs.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --switch
 ```
 
 4. Restart. From stock **power the printer off and on** (the MCU firmware changes only on a cold start). From a running Datel OS a `reboot` is enough.
-
-Pick the system variant with `ROOTFS`: `…-kalico.squashfs` (Kalico, open MCU firmware, recommended) or `…-klipper-creality.squashfs` (Creality's Klipper, stock MCU firmware). Both use the same kernel image.
 
 ## Trial boot and keeping a slot
 
@@ -67,7 +65,7 @@ What the trial boot does not cover: a kernel that hangs before the first service
 - The IP address may change. Datel OS identifies itself to the DHCP server with the MAC address, like stock, but routers differ. Find the printer by its host name `datel` or by the Moonraker port 7125.
 - Wi-Fi settings are copied from stock on the first start (`/usr/data/wpa_supplicant.conf` to `/usr/data/k1os/`). Later changes do not propagate between the systems.
 - Mainsail is at `http://<ip>/`. The camera and the printer name are registered automatically.
-- **Kalico variant:** the configuration is converted once and the three MCUs get the open firmware on the first cold start, about 10 s. After a warm restart from stock the main MCU stays in shutdown; one `FIRMWARE_RESTART` fixes it. Calibration and fans are described in [KALICO.md](KALICO.md).
+- **Klipper:** the stock configuration is converted to Kalico once and the three MCUs get the open firmware on the first cold start, about 10 s. After a warm restart from stock the main MCU stays in shutdown; one `FIRMWARE_RESTART` fixes it. Calibration and fans are described in [KALICO.md](KALICO.md).
 - **Slicer:** add `TIMELAPSE_TAKE_FRAME` to the layer change G-code if you want timelapses, see [CAMERA.md](CAMERA.md). OrcaSlicer's device tab needs the camera "K1 (snapshots)".
 
 ## Datel OS in both slots

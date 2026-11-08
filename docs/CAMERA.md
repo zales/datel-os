@@ -33,7 +33,7 @@ Timelapse uses [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-
 2. Print. The panel shows the frames and renders the video when the print ends; `TIMELAPSE_RENDER` renders on demand.
 3. The video appears in the Timelapse panel and under `/usr/data/k1os/timelapse/`.
 
-The panel's CRF setting becomes the encoder's fixed quantiser (QP = CRF + 5, default 28). The macros are part of `k1os_kalico.cfg` in the Kalico variant; a printer converted before 8 November 2026 needs `[include /usr/share/k1os/timelapse.cfg]` added by hand. The component and the codec tool are in both image variants.
+The panel's CRF setting becomes the encoder's fixed quantiser (QP = CRF + 5, default 28). The macros are included by `k1os_kalico.cfg`; a printer converted before 8 November 2026 needs `[include /usr/share/k1os/timelapse.cfg]` added by hand.
 
 ### Options
 

@@ -4,7 +4,6 @@
 #
 #   ./build.sh                 bitbake k1-image
 #   ./build.sh virtual/kernel  any other bitbake target
-#   KAS_FILE=kas-creality-k1-kalico.yml ./build.sh   the Kalico variant
 #   JOBS=4 ./build.sh          bitbake threads and make jobs (default: host CPUs)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

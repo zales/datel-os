@@ -16,13 +16,10 @@ IMAGE_INSTALL = " \
     k1os-base datel-branding \
 "
 
-# Printing stack: Creality's Klipper (fits the stock MCU firmware), Moonraker,
-# Mainsail on nginx and Guppy Screen on the touch display.
-# K1OS_KLIPPER picks the printing stack: "klipper-creality" (Creality's fork
-# with the stock MCU firmware) or "kalico" (pellcorp's Kalico with our own
-# MCU firmware and the load cell probe).
-K1OS_KLIPPER ?= "klipper-creality"
-IMAGE_INSTALL += "${K1OS_KLIPPER} moonraker mainsail guppyscreen nginx ustreamer"
+# Printing stack: Kalico (pellcorp's tree with the K1 load cell probe) with our
+# own firmware for the three MCUs, Moonraker, Mainsail on nginx and Guppy
+# Screen on the touch display.
+IMAGE_INSTALL += "kalico moonraker mainsail guppyscreen nginx ustreamer"
 # Timelapse: moonraker-timelapse with the render step on the X2000 Helix codec
 # (k1os-helix, pulls in ffmpeg for the MP4 muxing).
 IMAGE_INSTALL += "moonraker-timelapse k1os-helix"

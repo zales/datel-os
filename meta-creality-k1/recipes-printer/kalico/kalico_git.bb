@@ -66,7 +66,6 @@ do_install() {
 FILES:${PN} += "${KLIPPER_DIR} ${systemd_system_unitdir} ${libexecdir}/k1os ${sysconfdir}/k1os"
 INSANE_SKIP:${PN} += "already-stripped ldflags"
 
-RCONFLICTS:${PN} = "klipper-creality"
 RDEPENDS:${PN} += " \
     k1os-base \
     python3-modules \

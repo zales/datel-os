@@ -1,6 +1,6 @@
-# The Kalico variant
+# Kalico and the MCU firmware
 
-The `kalico` image replaces Creality's Klipper with Kalico and loads open firmware into all three MCUs. It is the variant the author prints with. The image variant is selected by `K1OS_KLIPPER` (`kalico` or `klipper-creality`, the latter being the kas default); build it with `KAS_FILE=kas-creality-k1-kalico.yml ./build.sh`.
+Datel OS prints with Kalico and loads open firmware into all three MCUs; Creality's Klipper and the stock MCU firmware are not part of the image.
 
 ## Components
 
@@ -11,7 +11,7 @@ The `kalico` image replaces Creality's Klipper with Kalico and loads open firmwa
 | Flashing | `k1os-mcu-update` (own) | Talks to the Creality serial bootloader on all three ports at once right after boot, writes a firmware only when the version differs, then starts the application |
 | Configuration | `k1os-kalico-config` (own) | Converts the stock `printer.cfg` once on the first start, backup next to it as `config.creality-<date>` |
 
-MCUs: mainboard GD32F303xE (`/dev/ttyS7`), nozzle GD32F303xB (`/dev/ttyS1`), bed leveling GD32E230x8 (`/dev/ttyS9`), all at 230400 baud. The `klipper-creality` image carries Creality's MCU images instead, so each variant restores the firmware it can work with.
+MCUs: mainboard GD32F303xE (`/dev/ttyS7`), nozzle GD32F303xB (`/dev/ttyS1`), bed leveling GD32E230x8 (`/dev/ttyS9`), all at 230400 baud.
 
 Firmware updates happen only on a cold start: the bootloader waits about 15 s after power-on, and a running Klipper cannot be sent into it. After a plain reboot the MCUs keep the firmware they have.
 

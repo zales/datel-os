@@ -1,6 +1,6 @@
 # Datel OS releases
 
-Development happens in the private repository `zales/k1-yocto`; the public repository [`zales/datel-os`](https://github.com/zales/datel-os) receives the code and the images at every release. A release is a tag `vX.Y.Z` in the private repository. The workflow `.github/workflows/release.yml` builds both image variants from it, checks them, pushes the tagged commit with its history and the tag to the public repository's `main`, and creates the GitHub Release there with notes generated from the commits since the previous tag. All steps are done by `tools/release.sh`, so the same can be run by hand.
+Development happens in the private repository `zales/k1-yocto`; the public repository [`zales/datel-os`](https://github.com/zales/datel-os) receives the code and the images at every release. A release is a tag `vX.Y.Z` in the private repository. The workflow `.github/workflows/release.yml` builds the image from it, checks the files, pushes the tagged commit with its history and the tag to the public repository's `main`, and creates the GitHub Release there with notes generated from the commits since the previous tag. All steps are done by `tools/release.sh`, so the same can be run by hand.
 
 **Token.** The workflow writes to the public repository with the secret `DATEL_OS_TOKEN` of the private repository: a fine-grained personal access token (GitHub, Settings, Developer settings, Fine-grained tokens) with *Repository access* limited to `datel-os` and the permission *Contents: Read and write*. Set it with `gh secret set DATEL_OS_TOKEN -R zales/k1-yocto`. Without it the `publish` job stops before touching anything. The mirrored workflow file never runs in the public repository (every job checks the repository name).
 
@@ -8,10 +8,9 @@ Development happens in the private repository `zales/k1-yocto`; the public repos
 
 | File | Contents | Where it goes |
 |---|---|---|
-| `datel-os-vX.Y.Z-xImage` | Linux 6.6-rt kernel in the Ingenic `xImage` format, shared by both variants | mmcblk0p5 / p6 |
-| `datel-os-vX.Y.Z-klipper-creality.squashfs` | system with Creality's Klipper and the stock MCU firmware | mmcblk0p7 / p8 |
-| `datel-os-vX.Y.Z-kalico.squashfs` | system with Kalico and its own MCU firmware | mmcblk0p7 / p8 |
-| `datel-os-vX.Y.Z-<variant>.ota.img` | the same packed as a package for the Creality updater (7z, AES); the version inside is `9.X.Y.Z` | the inactive slot |
+| `datel-os-vX.Y.Z-xImage` | Linux 6.6-rt kernel in the Ingenic `xImage` format | mmcblk0p5 / p6 |
+| `datel-os-vX.Y.Z-rootfs.squashfs` | the system with Kalico and its own MCU firmware | mmcblk0p7 / p8 |
+| `datel-os-vX.Y.Z.ota.img` | the same packed as a package for the Creality updater (7z, AES); the version inside is `9.X.Y.Z` | the inactive slot |
 | `SHA256SUMS` | checksums of all files | |
 
 **What a release never contains:** the bootloader (neither the SPL nor U-Boot, nor the open one from branch `feat/uboot`, which is not verified on the printer), the RTOS `zero.bin` for the third core, and anything for partition `mmcblk0p9`. `tools/release.sh check` refuses every file outside the list above and additionally opens each `.ota.img` to verify that it contains only the kernel and system chunks and that `ota_update.in` installs only `kernel` and `rootfs`. The stock bootloader therefore stays in place and the way back to stock in the other slot keeps working.
@@ -57,7 +56,7 @@ git tag -a v0.3.0 -m "Datel OS 0.3.0"
 git push origin v0.3.0
 ```
 
-3. Watch *Actions* → *Release firmware*. The job `build` builds `klipper-creality` and then `kalico` (both variants share the build directory, hence one after the other), the job `publish` checks the files and creates the Release `Datel OS v0.3.0`. A tag with a hyphen (`v0.3.0-rc1`) becomes a *pre-release*; the version before the hyphen still has to match `DISTRO_VERSION`.
+3. Watch *Actions* → *Release firmware*. The job `build` builds the image, the job `publish` checks the files, mirrors the code and creates the Release `Datel OS v0.3.0` in the public repository. A tag with a hyphen (`v0.3.0-rc1`) becomes a *pre-release*; the version before the hyphen still has to match `DISTRO_VERSION`.
 
 A release can be repeated by hand through *Actions* → *Release firmware* → *Run workflow* with the name of an existing tag; the files in the Release are overwritten and the notes regenerated.
 
@@ -77,7 +76,7 @@ TAG=v0.3.0 tools/release.sh check
 TAG=v0.3.0 tools/release.sh notes > /tmp/notes.md && gh release create v0.3.0 release/* --verify-tag --title "Datel OS v0.3.0" --notes-file /tmp/notes.md
 ```
 
-`build` builds both variants and after each copies the images from the Docker volume into `release/` (the directory is in `.gitignore`), finally writing `SHA256SUMS`. `collect <variant>` only does the copying from whatever is in the deploy directory right now; useful when the build is already done.
+`build` builds the image, copies the files from the Docker volume into `release/` (the directory is in `.gitignore`) and writes `SHA256SUMS`. `collect` only does the copying from whatever is in the deploy directory right now; useful when the build is already done.
 
 ## Installing on the printer
 
@@ -94,11 +93,11 @@ gh release download v0.3.0 -R zales/datel-os -D dl/ && (cd dl && shasum -a 256 -
 2. Write, verify and switch the marker. From stock into slot 2 (`PRINTER=root@<ip>`):
 
 ```bash
-KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --write
+KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-rootfs.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --write
 ```
 
 ```bash
-KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --switch
+KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-rootfs.squashfs PRINTER=root@192.168.1.102 tools/flash-slot2.sh --switch
 ```
 
    From a running Datel OS into the other slot add `SLOT=1` or `SLOT=2` (the one the printer is not running from; the script checks this and refuses to write into the running one). Without `--write` the script only checks and writes nothing.
@@ -107,7 +106,7 @@ KERNEL=dl/datel-os-v0.3.0-xImage ROOTFS=dl/datel-os-v0.3.0-kalico.squashfs PRINT
 
 4. On the first start after a warm restart from stock into Datel OS the main MCU stays in shutdown and Klipper reports a configuration error; one `FIRMWARE_RESTART` sorts it out. Between two Datel OS slots this does not happen.
 
-The `kalico` variant loads its own firmware into all three MCUs on the first cold start (about 10 s); on the way back stock reflashes the MCU firmware itself. Details on probe calibration and input shaping are in [KALICO.md](KALICO.md).
+Datel OS loads its own firmware into all three MCUs on the first cold start (about 10 s); on the way back stock reflashes the MCU firmware itself. Details on probe calibration and input shaping are in [KALICO.md](KALICO.md).
 
 **Datel OS in both slots.** Once you overwrite the second slot too, stock disappears from the printer and A/B serves Datel OS alone. Back up the stock partitions p1–p5 and p7 first (`ssh root@<ip> dd if=/dev/mmcblk0pN bs=1M > mmcblk0pN.bin`, about 330 MB, compare the MD5 with `md5sum /dev/mmcblk0pN` on the printer); the way back to stock is writing those files back from a running Datel OS. Without stock on the printer the display does not work (Datel OS has no panel driver yet).
 

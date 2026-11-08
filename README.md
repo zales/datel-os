@@ -12,7 +12,7 @@ Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, K
 |---|---|
 | Kernel | Linux 6.6.157 PREEMPT_RT (Ingenic X2000, NebulaOS tree) with a K1 device tree: eMMC, Wi-Fi with the stock MAC, all three MCU UARTs, UVC camera, Helix video codec |
 | System | Yocto scarthgap, systemd, read-only squashfs root, data in `/usr/data/k1os`, A/B slots with a trial boot that falls back to the other slot |
-| Printing | **Kalico** with open firmware on all three MCUs (load cell probe, verified prints), or Creality's Klipper with the stock MCU firmware |
+| Printing | Kalico with open firmware on all three MCUs, load cell probe, verified prints |
 | Web UI | Moonraker and Mainsail behind nginx, printer name and camera registered on first boot |
 | Camera | 720p MJPEG through uStreamer, a snapshot camera for OrcaSlicer's embedded browser |
 | Timelapse | moonraker-timelapse with the render on the X2000 Helix hardware encoder |
@@ -28,7 +28,7 @@ Ordered by how much it hurts.
 1. **No display.** Datel OS has no panel driver. Control the printer through Mainsail, OrcaSlicer or SSH.
 2. **No automatic fallback from a kernel that does not boot.** The stock SPL has no boot counter. The trial boot protects from the first systemd service on; a kernel that hangs before that needs the USB mask-ROM boot ([tools/usbboot/README.md](tools/usbboot/README.md)), not yet verified on the S12 board.
 3. **Installation needs root over SSH on stock.** Creality publishes the stock root password in its rooting guide.
-4. **MCU firmware changes only on a cold start.** When moving between stock and the Kalico variant, power the printer off and on.
+4. **MCU firmware changes only on a cold start.** When moving between stock and Datel OS, power the printer off and on.
 5. **Verified on one printer:** board CR4CU220812S11, panel `lcm_id=3`.
 6. **Wi-Fi is 2.4 GHz only.** The camera stream can saturate a weak link; the default is 8 fps.
 
@@ -41,13 +41,13 @@ Short version; the full procedure with backup, recovery and first-start steps is
 3. Write the inactive slot and verify it:
 
 ```bash
-KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-kalico.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --write
+KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-rootfs.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --write
 ```
 
 4. Point the boot marker at the new slot and power-cycle the printer:
 
 ```bash
-KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-kalico.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --switch
+KERNEL=dl/datel-os-vX.Y.Z-xImage ROOTFS=dl/datel-os-vX.Y.Z-rootfs.squashfs PRINTER=root@<ip> tools/flash-slot2.sh --switch
 ```
 
 Datel OS starts in trial mode: a power cycle returns to the previous system until you run `k1os-slot keep` on the printer.
@@ -60,18 +60,14 @@ Needs Docker. The build tree lives in the Docker volume `k1yocto-work` because Y
 ./build.sh
 ```
 
-```bash
-KAS_FILE=kas-creality-k1-kalico.yml ./build.sh
-```
-
-The first command builds the `klipper-creality` variant, the second the `kalico` variant. Images land in the volume under `build/tmp/deploy/images/creality-k1/`; `tools/release.sh collect <variant>` copies them out. Details in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Images land in the volume under `build/tmp/deploy/images/creality-k1/`; `TAG=vX.Y.Z tools/release.sh collect` copies them out. Details in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
 | [docs/INSTALL.md](docs/INSTALL.md) | Backup, flashing, trial boot, both slots, going back to stock, recovery |
-| [docs/KALICO.md](docs/KALICO.md) | The Kalico variant: MCU firmware, configuration conversion, probe and input shaper calibration, fans |
+| [docs/KALICO.md](docs/KALICO.md) | Kalico and the MCU firmware: configuration conversion, probe and input shaper calibration, fans |
 | [docs/CAMERA.md](docs/CAMERA.md) | Camera settings, OrcaSlicer, timelapse |
 | [docs/TWITCH.md](docs/TWITCH.md) | Twitch live stream: setup, Mainsail dialog, overlay, automatic title |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Layer layout, build, kernel and image internals, design decisions |
@@ -84,7 +80,7 @@ The first command builds the `klipper-creality` variant, the second the `kalico`
 | Path | Contents |
 |---|---|
 | `meta-creality-k1/` | The Yocto layer: machine and distro, kernel recipe with the K1 device tree, printer software, Datel OS services |
-| `kas-creality-k1.yml`, `kas-creality-k1-kalico.yml` | kas configurations of the two variants |
+| `kas-creality-k1.yml` | kas configuration of the build |
 | `build.sh` | Builds in Docker |
 | `tools/` | `flash-slot2.sh` (install over SSH), `release.sh`, `shaper-fit.sh`, `rtos-splash.py`, `usbboot/` |
 | `hardware/` | Stock device tree, module parameters and live GPIO state of the reference printer |
@@ -98,7 +94,6 @@ Our code, recipes, scripts, documentation and artwork are under the MIT license 
 |---|---|---|
 | Linux 6.6 (Ingenic X2000, NebulaOS) | GPL-2.0 | [NebulaOS-KE/NebulaOS-kernel](https://github.com/NebulaOS-KE/NebulaOS-kernel) |
 | Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware) |
-| Creality's Klipper (variant `klipper-creality`) | GPL-3.0 | [CrealityOfficial/K1_Series_Klipper](https://github.com/CrealityOfficial/K1_Series_Klipper) |
 | Moonraker, Mainsail, moonraker-timelapse | GPL-3.0 | upstream |
 | uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
 | ffmpeg 6.1 (muxing only, no x264) | LGPL-2.1 / GPL-2.0 | poky |

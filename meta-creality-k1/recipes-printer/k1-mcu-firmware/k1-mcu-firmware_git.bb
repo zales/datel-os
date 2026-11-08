@@ -48,4 +48,3 @@ do_install() {
 
 FILES:${PN} = "${datadir}/klipper/fw"
 RDEPENDS:${PN} = "k1os-mcu-update"
-RCONFLICTS:${PN} = "klipper-creality"

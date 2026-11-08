@@ -1,5 +1,5 @@
 # Datel OS firmware release. A tag vX.Y.Z in the development repository
-# (zales/k1-yocto, private) builds both image variants on the self-hosted
+# (zales/k1-yocto, private) builds the image on the self-hosted
 # runner (label "k1-yocto") and publishes them to the public repository
 # zales/datel-os: the tagged commit and its history go to its main branch and
 # the tag, the images become a GitHub Release there. The steps are
@@ -53,7 +53,7 @@ jobs:
       - name: Tag matches DISTRO_VERSION
         run: tools/release.sh version
 
-      - name: Build klipper-creality and kalico, collect the images
+      - name: Build the image and collect the files
         run: tools/release.sh build
 
       - uses: actions/upload-artifact@v4

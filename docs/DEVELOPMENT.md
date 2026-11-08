@@ -5,15 +5,12 @@
 The build runs in Docker with [kas](https://github.com/siemens/kas). The build tree, `sstate-cache` and `downloads` live in the Docker volume `k1yocto-work`, because Yocto needs a case-sensitive file system and the volume keeps a clean build (hours) from happening twice.
 
 ```bash
-./build.sh                                   # k1-image, variant klipper-creality
-KAS_FILE=kas-creality-k1-kalico.yml ./build.sh   # variant kalico
+./build.sh                                   # k1-image
 ./build.sh virtual/kernel                    # any bitbake target
 JOBS=4 ./build.sh                            # bitbake threads and make jobs
 ```
 
-The log is `build-last.log` in the volume. Images land in `build/tmp/deploy/images/creality-k1/`: `xImage` (kernel), `k1-image-creality-k1.rootfs.squashfs-xz` (system) and `CR4CU220812S11_ota_img_V9.X.Y.Z.img` (the stock updater's package format). `tools/release.sh collect <variant>` copies them out of the volume under their release names; `tools/flash-slot2.sh` installs them, see [INSTALL.md](INSTALL.md).
-
-The kernel is shared by both variants. Yocto's `sstate` makes a variant switch a matter of minutes once both have been built.
+The log is `build-last.log` in the volume. Images land in `build/tmp/deploy/images/creality-k1/`: `xImage` (kernel), `k1-image-creality-k1.rootfs.squashfs-xz` (system) and `CR4CU220812S11_ota_img_V9.X.Y.Z.img` (the stock updater's package format). `TAG=vX.Y.Z tools/release.sh collect` copies them out of the volume under their release names; `tools/flash-slot2.sh` installs them, see [INSTALL.md](INSTALL.md).
 
 ## Layer layout
 
@@ -28,14 +25,12 @@ The kernel is shared by both variants. Yocto's `sstate` makes a variant switch a
 | `recipes-core/k1os-base/` | Datel OS services: data directory setup, trial boot and slot confirmation, Wi-Fi MAC, camera and printer-name seeding, `k1os-slot` |
 | `recipes-core/images/k1-image.bb` | The image |
 | `recipes-core/datel-branding/` | Hostname, MOTD, prompt, Mainsail logo |
-| `recipes-printer/` | `kalico`, `klipper` (Creality), `k1-mcu-firmware`, `k1os-mcu-update`, `moonraker`, `mainsail`, `guppyscreen`, `ustreamer`, `moonraker-timelapse`, `k1os-helix`, `k1os-stream` |
+| `recipes-printer/` | `kalico`, `k1-mcu-firmware`, `k1os-mcu-update`, `moonraker`, `mainsail`, `guppyscreen`, `ustreamer`, `moonraker-timelapse`, `k1os-helix`, `k1os-stream` |
 | `recipes-httpd/nginx/` | Mainsail and camera proxy configuration |
 | `recipes-multimedia/ffmpeg/` | ffmpeg trimmed to muxing, MIPS configure fixes |
 | `recipes-bsp/k1-wifi-nvram/` | Wi-Fi module calibration file |
 | `recipes-devtools/gcc/` | gcc built for FP64 and NaN 2008 |
 | `recipes-python/`, `recipes-connectivity/` | Python dependencies of Moonraker, sshd on a read-only root |
-
-Variant selection: `K1OS_KLIPPER` (`klipper-creality` or `kalico`) in the kas file picks the Klipper recipe and the MCU firmware set.
 
 ## What it is built on
 
@@ -73,7 +68,7 @@ Variant selection: `K1OS_KLIPPER` (`klipper-creality` or `kalico`) in the kas fi
 
 ## Branches
 
-- `main`: both variants, what the releases are built from.
+- `main`: what the releases are built from.
 - `feat/uboot`: an open U-Boot with a boot counter, not verified on the printer.
 
 Releases are tags `vX.Y.Z` built by a self-hosted runner, see [RELEASE.md](RELEASE.md). The engineering log with dated findings is [NOTES.md](NOTES.md).
