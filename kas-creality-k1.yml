@@ -37,3 +37,6 @@ local_conf_header:
     INHERIT += "rm_work"
     BB_NUMBER_THREADS ?= "8"
     PARALLEL_MAKE ?= "-j 8"
+    # ffmpeg (poky) carries LICENSE_FLAGS = "commercial" for the patent-encumbered codecs
+    # it can build; the Twitch stream (h264/flv) and the timelapse muxing (-c copy) use it.
+    LICENSE_FLAGS_ACCEPTED += "commercial"

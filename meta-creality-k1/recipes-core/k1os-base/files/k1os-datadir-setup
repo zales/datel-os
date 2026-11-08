@@ -16,6 +16,18 @@ if [ ! -e $D/printer_data/config/printer.cfg ] && [ -e /usr/data/printer_data/co
     echo "k1os: seeded Klipper config from the stock firmware"
 fi
 [ -e $D/printer_data/config/moonraker.conf ] || cp /etc/k1os/moonraker.conf $D/printer_data/config/
+# Moonraker config fragments shipped by packages (/etc/k1os/moonraker.d, e.g.
+# [timelapse]) are appended once, when the user's moonraker.conf lacks the section.
+for f in /etc/k1os/moonraker.d/*.conf; do
+    [ -e "$f" ] || continue
+    sec=$(sed -n 's/^\[\([^]]*\)\].*/\1/p' "$f" | head -n 1)
+    [ -n "$sec" ] || continue
+    if ! grep -q "^\[$sec\]" $D/printer_data/config/moonraker.conf; then
+        printf '\n' >> $D/printer_data/config/moonraker.conf
+        cat "$f" >> $D/printer_data/config/moonraker.conf
+        echo "k1os: added [$sec] to moonraker.conf"
+    fi
+done
 
 # Print files are shared with the stock slot.
 if [ -d /usr/data/printer_data/gcodes ] && [ ! -L $D/printer_data/gcodes ] && [ -z "$(ls -A $D/printer_data/gcodes)" ]; then

@@ -23,6 +23,9 @@ IMAGE_INSTALL = " \
 # MCU firmware and the load cell probe).
 K1OS_KLIPPER ?= "klipper-creality"
 IMAGE_INSTALL += "${K1OS_KLIPPER} moonraker mainsail guppyscreen nginx ustreamer"
+# Timelapse: moonraker-timelapse with the render step on the X2000 Helix codec
+# (k1os-helix, pulls in ffmpeg for the MP4 muxing).
+IMAGE_INSTALL += "moonraker-timelapse k1os-helix"
 
 IMAGE_ROOTFS_EXTRA_SPACE = "0"
 
