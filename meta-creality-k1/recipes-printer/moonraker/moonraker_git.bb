@@ -59,4 +59,8 @@ RDEPENDS:${PN} += " \
     python3-sqlite3 \
     python3-periphery \
     iproute2 \
+    sudo \
 "
+# sudo: the systemd_cli provider of Moonraker's machine component runs every
+# service action as "sudo systemctl ..." even as root; without the binary
+# Mainsail's Services menu (k1os-twitch, ustreamer, ...) fails with HTTP 500.

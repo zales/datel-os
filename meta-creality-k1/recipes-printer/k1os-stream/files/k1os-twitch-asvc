@@ -1,0 +1,16 @@
+#!/bin/sh
+# Let Mainsail start and stop the Twitch stream: Moonraker only touches the
+# systemd units listed in printer_data/moonraker.asvc. Runs before Moonraker
+# (drop-in ExecStartPre). When the file does not exist yet, it is created
+# with Moonraker's own default list so that nothing else is lost.
+f=/usr/data/k1os/printer_data/moonraker.asvc
+if [ ! -e "$f" ]; then
+    mkdir -p "$(dirname "$f")"
+    printf '%s\n' klipper klipper_mcu moonraker webcamd MoonCord KlipperScreen \
+        moonraker-telegram-bot moonraker-obico sonar crowsnest octoeverywhere \
+        ratos-configurator > "$f"
+fi
+# Moonraker's default file has no newline at its end.
+[ -s "$f" ] && [ -n "$(tail -c 1 "$f")" ] && echo >> "$f"
+grep -qx 'k1os-twitch' "$f" || echo k1os-twitch >> "$f"
+exit 0

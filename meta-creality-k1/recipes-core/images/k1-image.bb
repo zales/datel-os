@@ -26,6 +26,8 @@ IMAGE_INSTALL += "${K1OS_KLIPPER} moonraker mainsail guppyscreen nginx ustreamer
 # Timelapse: moonraker-timelapse with the render step on the X2000 Helix codec
 # (k1os-helix, pulls in ffmpeg for the MP4 muxing).
 IMAGE_INSTALL += "moonraker-timelapse k1os-helix"
+# Twitch live stream with a status overlay (k1os-stream on the Helix codec, ffmpeg for RTMP).
+IMAGE_INSTALL += "k1os-stream"
 
 IMAGE_ROOTFS_EXTRA_SPACE = "0"
 

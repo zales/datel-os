@@ -1,0 +1,15 @@
+[Unit]
+Description=Start the Twitch stream at boot when twitch.env says TWITCH_AUTOSTART=1
+After=moonraker.service
+# The ordering reference makes systemd load k1os-twitch.service at boot without
+# starting it; Moonraker only offers services that "systemctl list-units --all"
+# shows, and a never-started static unit is not among them.
+Before=k1os-twitch.service
+ConditionPathExists=/usr/data/k1os/twitch.env
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'TWITCH_AUTOSTART=; . /usr/data/k1os/twitch.env; [ "$TWITCH_AUTOSTART" = 1 ] && systemctl start --no-block k1os-twitch.service; exit 0'
+
+[Install]
+WantedBy=multi-user.target

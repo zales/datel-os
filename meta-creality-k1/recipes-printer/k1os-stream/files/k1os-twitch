@@ -1,0 +1,88 @@
+#!/bin/sh
+# Live stream to Twitch: camera frames (from uStreamer's memory sink, so
+# Mainsail keeps its camera; straight from the camera when uStreamer is not
+# running), status overlay and H.264 by k1os-stream on the Helix codec,
+# FLV over RTMP by ffmpeg.
+#
+# Settings in /usr/data/k1os/twitch.env (mode 600, the stream key lives only
+# there):
+#   TWITCH_KEY=live_...                      required
+#   TWITCH_INGEST=rtmp://live.twitch.tv/app  optional, a closer ingest server
+#   TWITCH_BITRATE=2500                      optional, kbit/s
+#   TWITCH_FPS=                              optional, default: the camera's CAMERA_FPS
+#   TWITCH_RESOLUTION=1280x720               optional, capture size without uStreamer
+#   TWITCH_OVERLAY=1                         optional, 0 plain camera, 1 status bar,
+#                                            2 status bar and the graph panel
+#   TWITCH_GRAPH_CORNER=tr                   optional, corner of the panel: tl tr bl br
+# Mainsail's TWITCH dialog (Moonraker component k1os_stream) writes the
+# optional lines; k1os-stream reports its rate to /run/k1os/twitch-status.json.
+ENV=/usr/data/k1os/twitch.env
+if [ ! -r "$ENV" ]; then
+    echo "k1os-twitch: $ENV is missing. Create it on the printer with your stream key:" >&2
+    echo "  umask 077; echo TWITCH_KEY=live_xxxxxxxx > $ENV" >&2
+    exit 1
+fi
+TWITCH_KEY=; TWITCH_INGEST=; TWITCH_BITRATE=; TWITCH_FPS=; TWITCH_RESOLUTION=; TWITCH_OVERLAY=
+TWITCH_GRAPH_CORNER=
+. "$ENV"
+if [ -z "$TWITCH_KEY" ]; then
+    echo "k1os-twitch: TWITCH_KEY is empty in $ENV" >&2
+    exit 1
+fi
+[ -r /usr/data/k1os/camera.env ] && . /usr/data/k1os/camera.env
+FPS=${TWITCH_FPS:-${CAMERA_FPS:-8}}
+BITRATE=${TWITCH_BITRATE:-2500}
+INGEST=${TWITCH_INGEST:-rtmp://live.twitch.tv/app}
+SIZE=${TWITCH_RESOLUTION:-${CAMERA_RESOLUTION:-1280x720}}
+STATUS=/run/k1os/twitch-status.json
+mkdir -p /run/k1os
+OPTS="--fps $FPS --bitrate $BITRATE --status-file $STATUS"
+case "${TWITCH_OVERLAY:-1}" in
+    0) OPTS="$OPTS --no-overlay" ;;
+    2) OPTS="$OPTS --graph ${TWITCH_GRAPH_CORNER:-tr}" ;;
+esac
+
+if [ -e "/dev/shm/k1os::jpeg" ]; then
+    # uStreamer runs: take its frames, the camera stays shared with Mainsail
+    if [ -n "$TWITCH_RESOLUTION" ] && [ "$TWITCH_RESOLUTION" != "${CAMERA_RESOLUTION:-1280x720}" ]; then
+        echo "k1os-twitch: uStreamer runs, the stream has the camera's ${CAMERA_RESOLUTION:-1280x720}, not TWITCH_RESOLUTION=$TWITCH_RESOLUTION" >&2
+    fi
+    run_stream() {
+        /usr/bin/ustreamer-dump --sink=k1os::jpeg --output - |
+            /usr/bin/k1os-stream --camera - $OPTS
+    }
+else
+    dev=$(/usr/libexec/k1os/camera-device) || exit 1
+    run_stream() {
+        /usr/bin/k1os-stream --camera "$dev" --size "$SIZE" $OPTS
+    }
+fi
+
+# The key goes to ffmpeg as the RTMP play path, not as part of the URL: that
+# way none of ffmpeg's messages (which name the output URL) contain it, and
+# the output below reaches the journal as it is written.
+run_stream | /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin \
+    -use_wallclock_as_timestamps 1 -f h264 -framerate "$FPS" -i - \
+    -f lavfi -i "anullsrc=r=44100:cl=mono" \
+    -map 0:v -map 1:a -c:v copy -c:a aac -b:a 32k -ar 44100 -ac 1 \
+    -shortest -flvflags no_duration_filesize \
+    -rtmp_app "${INGEST##*/}" -rtmp_playpath "$TWITCH_KEY" -f flv "${INGEST%/*}/" &
+pipe=$!
+
+# A stop (SIGTERM from systemd) ends the pipeline here: ustreamer-dump does
+# not always leave on SIGTERM while it waits for the sink, and the unit must
+# end as inactive, not failed, or Moonraker waits on it.
+stopping=
+on_stop() {
+    trap "" TERM INT
+    stopping=1
+    kill -TERM $pipe $(pidof ustreamer-dump k1os-stream) 2>/dev/null
+    sleep 1
+    kill -KILL $(pidof ustreamer-dump) 2>/dev/null
+}
+trap on_stop TERM INT
+wait $pipe
+rc=$?
+rm -f "$STATUS"
+[ -n "$stopping" ] && exit 0
+exit $rc

@@ -1,0 +1,17 @@
+[Unit]
+Description=Twitch live stream of the camera with a status overlay
+After=network-online.target ustreamer.service moonraker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/k1os/twitch
+Restart=on-failure
+RestartSec=15
+# The wrapper tears the pipeline down itself on SIGTERM (ustreamer-dump may
+# linger otherwise) and exits 0; the timeout is only a backstop.
+TimeoutStopSec=5
+SuccessExitStatus=143
+# The key stays in twitch.env (root, 0600); nothing here or in the logs names it.
+Nice=5
+
