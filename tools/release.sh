@@ -50,8 +50,8 @@ kas_file() {
 }
 describe() {
     case "$1" in
-        klipper-creality) echo "systém s Klipperem od Creality a stock firmwarem MCU" ;;
-        kalico) echo "systém s Kalicem a vlastním firmwarem MCU (při studeném startu přeflashuje všechna tři MCU)" ;;
+        klipper-creality) echo "system with Creality's Klipper and the stock MCU firmware" ;;
+        kalico) echo "system with Kalico and its own MCU firmware (reflashes all three MCUs on a cold start)" ;;
     esac
 }
 
@@ -188,31 +188,31 @@ notes() {
     local sha prev range v
     sha=$(git -C "$HERE" rev-parse --short "$TAG^{commit}" 2>/dev/null || git -C "$HERE" rev-parse --short HEAD)
     prev=$(git -C "$HERE" describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
-    echo "Obrazy Datel OS pro Creality K1 (deska $BOARD, Ingenic X2000), sestavené z commitu $sha."
+    echo "Datel OS images for the Creality K1 (board $BOARD, Ingenic X2000), built from commit $sha."
     echo
     echo "| Soubor | Obsah |"
     echo "|---|---|"
-    echo "| \`$KERNEL_NAME\` | jádro Linux 6.6-rt, \`xImage\` pro mmcblk0p5/p6 |"
+    echo "| \`$KERNEL_NAME\` | Linux 6.6-rt kernel, \`xImage\` for mmcblk0p5/p6 |"
     for v in $(variants_present); do
-        echo "| \`$(rootfs_name "$v")\` | $(describe "$v"), squashfs pro mmcblk0p7/p8 |"
+        echo "| \`$(rootfs_name "$v")\` | $(describe "$v"), squashfs for mmcblk0p7/p8 |"
     done
     for v in $(variants_present); do
-        echo "| \`$(ota_name "$v")\` | totéž jako balík pro aktualizátor Creality (varianta $v); před použitím přejmenuj na \`$OTA_NAME\` |"
+        echo "| \`$(ota_name "$v")\` | the same as a package for the Creality updater (variant $v); rename to \`$OTA_NAME\` before use |"
     done
-    echo "| \`SHA256SUMS\` | kontrolní součty všech souborů |"
+    echo "| \`SHA256SUMS\` | checksums of all files |"
     echo
-    echo "Instalace je v [docs/RELEASE.md]($REPO_URL/blob/$TAG/docs/RELEASE.md). Balík obsahuje jen jádro a systém a zapisuje se do neaktivního slotu; bootloader, RTOS ani oddíl \`mmcblk0p9\` nemění. Datel OS startuje ve zkušebním režimu: dokud nespustíš \`k1os-slot keep\`, vrátí vypnutí a zapnutí tiskárny stock."
+    echo "Installation is described in [docs/RELEASE.md]($REPO_URL/blob/$TAG/docs/RELEASE.md). The package holds only the kernel and the system and is written into the inactive slot; the bootloader, the RTOS and partition \`mmcblk0p9\` are not touched. Datel OS boots in trial mode: until you run \`k1os-slot keep\`, a power cycle brings the previous system back."
     echo
     if [ -n "$prev" ]; then
-        echo "## Změny od $prev"
+        echo "## Changes since $prev"
         range="$prev..$TAG"
     else
-        echo "## Změny (první vydání)"
+        echo "## Changes (first release)"
         range="$TAG"
     fi
     echo
     git -C "$HERE" log --no-merges --format='- %s (%h)' "$range" 2>/dev/null || git -C "$HERE" log --no-merges --format='- %s (%h)'
-    if [ -n "$prev" ]; then echo; echo "Celý rozdíl: $REPO_URL/compare/$prev...$TAG"; fi
+    if [ -n "$prev" ]; then echo; echo "Full diff: $REPO_URL/compare/$prev...$TAG"; fi
 }
 
 case "${1:-}" in
