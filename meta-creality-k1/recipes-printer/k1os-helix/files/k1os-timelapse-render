@@ -59,8 +59,11 @@ progflag=
 [ -n "$progress" ] && progflag="-p $(ls "$dir"/frame*.jpg 2>/dev/null | wc -l)"
 
 # Progress lines (frame=N ...) go to stdout, where moonraker-timelapse reads them.
+# The raw H.264 carries no timestamps. "-r" (input option) stamps every frame at
+# a fixed rate; "-framerate" only seeds the h264 demuxer's guess, which goes
+# wrong after about 50 frames (the rest get 1 us apart and players skip them).
 if ls "$dir"/frame*.jpg 2>/dev/null | sort | "$ENC" -d "$HELIX_DEV" $decflag $progflag -q "$qp" -g "${HELIX_GOP:-30}" -o "$h264" - 2>&1 &&
-   "$FFMPEG" -nostdin -loglevel error -y -framerate "$fps" -i "$h264" -c:v copy -movflags +faststart "$out"; then
+   "$FFMPEG" -nostdin -loglevel error -y -r "$fps" -i "$h264" -c:v copy -movflags +faststart "$out"; then
     rm -f "$h264"
     exit 0
 fi
