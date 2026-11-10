@@ -20,5 +20,10 @@ KbdInteractiveAuthentication no
 CONF
     cat $f.stock >> $f
     rm -f $f.stock
+    # poky's read-only variant ends with HostKey lines for /var/run/ssh, a tmpfs:
+    # sshd_check_keys would generate those keys on every boot (the RSA one takes
+    # 40 s of one core on the X2000, right while Klipper and Moonraker start).
+    # The persistent keys above are the only ones.
+    sed -i '/^HostKey \/var\/run\/ssh\//d' $f
     done
 }
