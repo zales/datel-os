@@ -16,8 +16,9 @@ Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, K
 | Web UI | Moonraker and Mainsail behind nginx, printer name and camera registered on first boot |
 | Camera | 720p MJPEG through uStreamer, H.264 over WebRTC through go2rtc from the Helix codec (shared with the Twitch stream), a snapshot camera for slow links |
 | Timelapse | moonraker-timelapse with the render on the X2000 Helix hardware encoder |
-| Twitch | Live stream with a status bar and temperature graph in the picture, controlled from Mainsail, automatic stream title |
+| Twitch | Live stream with a status bar, temperature graph and printer statistics in the picture, controlled from Mainsail, automatic stream title |
 | Updates | Write the inactive slot over SSH, trial boot, GitHub Releases from tags |
+| Staying alive | Hardware watchdog, compressed swap, an OOM kill instead of a freeze with the print killed last, the journal kept across a reboot and sent to a syslog server, a health line every minute |
 | Display and touch | **Missing.** The screen shows the RTOS boot logo only |
 | Own bootloader | In progress on branch `feat/uboot`, not verified on the printer |
 
@@ -70,6 +71,7 @@ Images land in the volume under `build/tmp/deploy/images/creality-k1/`; `TAG=vX.
 | [docs/KALICO.md](docs/KALICO.md) | Kalico and the MCU firmware: configuration conversion, probe and input shaper calibration, fans |
 | [docs/CAMERA.md](docs/CAMERA.md) | Camera settings, OrcaSlicer, timelapse |
 | [docs/TWITCH.md](docs/TWITCH.md) | Twitch live stream: setup, Mainsail dialog, overlay, automatic title |
+| [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) | Watchdog, the journal after a hang and on another machine, the health line, what happens out of memory |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Layer layout, build, kernel and image internals, design decisions |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | K1 hardware as found on the stock system: partitions, pins, peripherals |
 | [docs/RELEASE.md](docs/RELEASE.md) | Release files, the build runner, cutting a release |
