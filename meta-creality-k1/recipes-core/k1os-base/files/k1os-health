@@ -1,5 +1,6 @@
 #!/bin/sh
 # One line about the state of the system for the journal: load, free memory,
+# swap in use and memory pressure,
 # RAM held by tmpfs (the journal lives there), the biggest processes, the
 # Wi-Fi signal and what Klipper measures (board MCU and chamber temperature,
 # heaters, stepper driver flags, serial retransmits to the three MCUs). When
@@ -9,6 +10,9 @@
 # board is the nearest reading. "<5>" is the syslog priority "notice".
 load=$(cut -d' ' -f1-3 /proc/loadavg)
 mem=$(awk '/^MemAvailable:/ {printf "%d", $2 / 1024}' /proc/meminfo)
+swap=$(awk '/^SwapTotal:/ {t = $2} /^SwapFree:/ {f = $2} END {printf "%d", (t - f) / 1024}' /proc/meminfo)
+# share of the last 10 s in which some task waited for memory (PSI)
+psi=$(sed -n 's/^some avg10=\([0-9.]*\).*/\1/p' /proc/pressure/memory 2>/dev/null)
 tmpfs=$(df -k 2>/dev/null | awk '$1 == "tmpfs" || $1 == "devtmpfs" {s += $3} END {printf "%d", s / 1024}')
 top=$(awk '/^Name:/ {n = $2} /^VmRSS:/ {printf "%d %s\n", $2 / 1024, n}' /proc/[0-9]*/status 2>/dev/null |
       sort -rn | awk 'NR <= 4 {printf "%s%s:%sM", (NR > 1 ? "," : ""), $2, $1}')
@@ -35,4 +39,4 @@ if [ -n "$j" ]; then
 else
     klipper="klipper=unreachable"
 fi
-echo "<5>load=$load mem_avail=${mem}M tmpfs=${tmpfs}M top=$top wifi=${wifi:-down} $klipper"
+echo "<5>load=$load mem_avail=${mem}M swap=${swap}M mem_psi=${psi:--} tmpfs=${tmpfs}M top=$top wifi=${wifi:-down} $klipper"

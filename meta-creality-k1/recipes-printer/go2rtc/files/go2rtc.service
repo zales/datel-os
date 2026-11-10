@@ -10,6 +10,8 @@ Environment=GOMEMLIMIT=32MiB
 Restart=on-failure
 RestartSec=5
 Nice=5
+# Out of memory, the camera relay goes before the print.
+OOMScoreAdjust=600
 
 [Install]
 WantedBy=multi-user.target

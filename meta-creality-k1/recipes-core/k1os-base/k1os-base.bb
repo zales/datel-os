@@ -10,13 +10,14 @@ SRC_URI = "file://after-volatile-lib.conf file://usr-data.mount file://k1os-data
            file://k1os-slot file://k1os-trial-boot.service file://k1os-slot-confirm.service \
            file://k1os-bootlog.service file://k1os-bootlog.timer file://10-watchdog.conf file://k1os-logstream.service \
            file://k1os-health file://k1os-health.service file://k1os-health.timer file://10-k1os-journald.conf \
+           file://k1os-zram-swap file://k1os-zram-swap.service file://60-k1os-memory.conf file://k1os-memory-tmpfiles.conf \
            file://k1os-seed-webcam file://k1os-seed-webcam.service"
 S = "${WORKDIR}"
 
 inherit systemd allarch
 
 SYSTEMD_SERVICE:${PN} = "usr-data.mount k1os-datadir.service k1os-wifi.service \
-                         k1os-trial-boot.service k1os-slot-confirm.service k1os-bootlog.timer k1os-seed-webcam.service k1os-logstream.service k1os-health.timer"
+                         k1os-trial-boot.service k1os-slot-confirm.service k1os-bootlog.timer k1os-seed-webcam.service k1os-logstream.service k1os-health.timer k1os-zram-swap.service"
 
 do_install() {
     install -d ${D}${systemd_system_unitdir} ${D}/usr/data ${D}${libexecdir}/k1os ${D}${sysconfdir}/k1os
@@ -37,6 +38,10 @@ do_install() {
     install -m 0644 ${WORKDIR}/k1os-logstream.service ${D}${systemd_system_unitdir}/
     install -m 0755 ${WORKDIR}/k1os-health ${D}${libexecdir}/k1os/health
     install -m 0644 ${WORKDIR}/k1os-health.service ${WORKDIR}/k1os-health.timer ${D}${systemd_system_unitdir}/
+    install -m 0755 ${WORKDIR}/k1os-zram-swap ${D}${libexecdir}/k1os/zram-swap
+    install -m 0644 ${WORKDIR}/k1os-zram-swap.service ${D}${systemd_system_unitdir}/
+    install -D -m 0644 ${WORKDIR}/60-k1os-memory.conf ${D}${sysconfdir}/sysctl.d/60-k1os-memory.conf
+    install -D -m 0644 ${WORKDIR}/k1os-memory-tmpfiles.conf ${D}${sysconfdir}/tmpfiles.d/k1os-memory.conf
     install -d ${D}${sysconfdir}/systemd/journald.conf.d
     install -m 0644 ${WORKDIR}/10-k1os-journald.conf ${D}${sysconfdir}/systemd/journald.conf.d/
     install -d ${D}${sysconfdir}/systemd/network

@@ -20,6 +20,10 @@
 # and HELIX_PROGRESS=1 for a progress bar along the bottom of the video (frame
 # N of all frames, so the print's progress); for tests also FFMPEG, ENC and
 # HELIX_DEV (the codec's V4L2 node).
+
+# Moonraker starts this and hands down its protection from the OOM killer;
+# a render is the kind of thing that should go before the print does.
+echo 500 > /proc/$$/oom_score_adj 2>/dev/null
 [ -r /usr/data/k1os/timelapse.env ] && . /usr/data/k1os/timelapse.env
 FFMPEG=${FFMPEG:-/usr/bin/ffmpeg}
 ENC=${ENC:-/usr/bin/k1os-helix-enc}

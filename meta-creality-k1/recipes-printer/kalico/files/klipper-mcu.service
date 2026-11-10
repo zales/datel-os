@@ -7,6 +7,8 @@ Type=simple
 ExecStart=/usr/bin/klipper_mcu -r -I /tmp/klipper_host_mcu
 Restart=always
 RestartSec=5
+# Out of memory, the print is the last thing to lose.
+OOMScoreAdjust=-900
 
 [Install]
 WantedBy=multi-user.target

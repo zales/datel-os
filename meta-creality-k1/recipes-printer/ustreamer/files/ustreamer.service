@@ -9,6 +9,8 @@ EnvironmentFile=-/usr/data/k1os/camera.env
 ExecStart=/usr/libexec/k1os/camera-stream
 Restart=always
 RestartSec=10
+# Out of memory, the camera goes before the print.
+OOMScoreAdjust=300
 
 [Install]
 WantedBy=multi-user.target

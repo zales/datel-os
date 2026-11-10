@@ -12,6 +12,8 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/bin/python3 /usr/share/moonraker/moonraker/moonraker.py -d /usr/data/k1os/printer_data
 Restart=always
 RestartSec=10
+# A print survives Moonraker being killed, but the camera should go before it.
+OOMScoreAdjust=-300
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Datel OS: compressed swap in RAM (zram)
+ConditionPathExists=/sys/block/zram0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/k1os/zram-swap
+ExecStop=/usr/sbin/swapoff /dev/zram0
+
+[Install]
+WantedBy=multi-user.target
