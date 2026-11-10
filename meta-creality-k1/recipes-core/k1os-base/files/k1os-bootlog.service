@@ -5,4 +5,6 @@ After=usr-data.mount
 
 [Service]
 Type=oneshot
+# Runs every minute: keep its "Starting"/"Finished" lines out of the journal.
+LogLevelMax=notice
 ExecStart=/bin/sh -c 'd=/usr/data/k1os/log; mkdir -p $d; [ -e /run/k1os-bootlog.rotated ] || { [ -e $d/journal-last.txt ] && mv -f $d/journal-last.txt $d/journal-prev.txt; : > /run/k1os-bootlog.rotated; }; { echo "== $(date) uptime $(cut -d" " -f1 /proc/uptime)s"; systemctl --no-pager --failed; echo; systemctl --no-pager list-units --state=activating; echo; journalctl -b --no-pager -o short-monotonic; } > $d/journal-last.txt.tmp 2>&1 && mv $d/journal-last.txt.tmp $d/journal-last.txt'

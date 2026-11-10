@@ -1,0 +1,13 @@
+#!/bin/sh
+# One line about the state of the system for the journal: load, free memory,
+# RAM held by tmpfs (the journal lives there), the biggest processes and the
+# Wi-Fi signal. When the printer hangs, the last of these lines tell whether
+# it ran out of memory, was overloaded or was losing its network first.
+# "<5>" is the syslog priority "notice".
+load=$(cut -d' ' -f1-3 /proc/loadavg)
+mem=$(awk '/^MemAvailable:/ {printf "%d", $2 / 1024}' /proc/meminfo)
+tmpfs=$(df -k 2>/dev/null | awk '$1 == "tmpfs" || $1 == "devtmpfs" {s += $3} END {printf "%d", s / 1024}')
+top=$(awk '/^Name:/ {n = $2} /^VmRSS:/ {printf "%d %s\n", $2 / 1024, n}' /proc/[0-9]*/status 2>/dev/null |
+      sort -rn | awk 'NR <= 4 {printf "%s%s:%sM", (NR > 1 ? "," : ""), $2, $1}')
+wifi=$(iw dev wlan0 link 2>/dev/null | awk '/signal:/ {print $2 "dBm"}')
+echo "<5>load=$load mem_avail=${mem}M tmpfs=${tmpfs}M top=$top wifi=${wifi:-down}"
