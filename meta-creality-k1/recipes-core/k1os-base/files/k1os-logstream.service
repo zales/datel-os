@@ -1,0 +1,20 @@
+[Unit]
+Description=Datel OS: stream the journal to a remote syslog server
+Documentation=man:journalctl(1)
+# /usr/data/k1os/logstream.env names the server, e.g. LOG_REMOTE="192.168.1.10 514"
+# (host and TCP port, one line per message). A log that has left the printer
+# survives a hang; the journal in RAM does not.
+ConditionPathExists=/usr/data/k1os/logstream.env
+Requires=usr-data.mount
+After=usr-data.mount network.target
+
+[Service]
+EnvironmentFile=/usr/data/k1os/logstream.env
+# nc ends when the connection drops; the restart then resends the last lines.
+ExecStart=/bin/sh -c 'journalctl -b -f -n 2000 -o short-monotonic | nc $LOG_REMOTE'
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
