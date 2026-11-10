@@ -27,6 +27,10 @@ Mainsail shows every camera at once until one is picked, and the pick is stored 
 
 go2rtc starts the encoder (`/usr/libexec/k1os/h264-source`: `ustreamer-dump | k1os-stream`) for the first viewer and stops it after the last one leaves, so the WebRTC camera costs nothing while nobody watches. The picture follows the Twitch settings in `/usr/data/k1os/twitch.env` (bitrate, frame rate, overlay); changing them in the TWITCH dialog restarts go2rtc, and an open WebRTC view reconnects. go2rtc's API listens on localhost only; nginx passes on `/go2rtc/api/ws?src=k1` and nothing else, and the video goes over UDP/TCP port 8555.
 
+### Viewer limits
+
+nginx lets in two WebRTC viewers and two MJPEG streams at a time (`limit_conn` in `/etc/nginx/sites-enabled/mainsail`). A viewer costs the printer about 7 % of one core and 2.5 Mbit/s over WebRTC, about 10 % and 6 Mbit/s over MJPEG, measured during a print. One more viewer gets a 503; Mainsail's WebRTC player shows `disconnected` and tries again every 2 s until a place is free. Snapshots are not counted, so the timelapse and the **K1 (snapshots)** camera always work. The WebRTC limit counts the signalling WebSocket, which Mainsail holds open while it plays; it is a guard for the printer's resources, not an access control.
+
 ### OrcaSlicer
 
 OrcaSlicer's device tab on macOS is an embedded WebKit browser. WebKit fails a `fetch()` of a `multipart/x-mixed-replace` body ("Load failed"), and Mainsail's MJPEG player reads the stream with `fetch()`, so it reported "Error while connecting to …/webcam/?action=stream". nginx now labels the same bytes `multipart/mixed` for that request (Mainsail's worker sends `Accept: */*` and `?timestamp=`); an `<img>` or a browser tab still gets `multipart/x-mixed-replace`. All three cameras work there, **K1 (WebRTC)** included.

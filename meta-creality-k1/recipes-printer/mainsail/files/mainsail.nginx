@@ -16,6 +16,21 @@ map "$http_accept|$arg_timestamp|$upstream_http_content_type" $webcam_content_ty
     default $upstream_http_content_type;
 }
 
+# Viewer limits. Every camera viewer costs the two cores and the 2.4 GHz link:
+# a WebRTC viewer about 7 % of a core in go2rtc (SRTP in plain Go) and
+# 2.5 Mbit/s, an MJPEG viewer about 10 % and 6 Mbit/s. The zones count the open
+# WebRTC signalling WebSockets (Mainsail keeps its one open for as long as it
+# plays) and the open MJPEG streams; snapshots (?action=snapshot, the timelapse
+# too) have an empty key and are not counted. A viewer over the limit gets 503
+# and Mainsail's players try again by themselves until a place is free.
+limit_conn_zone $server_name zone=webrtc_viewers:64k;
+map $arg_action $mjpeg_viewer_key {
+    stream  $server_name;
+    default "";
+}
+limit_conn_zone $mjpeg_viewer_key zone=mjpeg_viewers:64k;
+limit_conn_status 503;
+
 upstream apiserver {
     ip_hash;
     server 127.0.0.1:7125;
@@ -77,6 +92,7 @@ server {
         if ($arg_src != "k1") {
             return 403;
         }
+        limit_conn webrtc_viewers 2;
         access_log off;
         proxy_pass http://127.0.0.1:1984;
         proxy_http_version 1.1;
@@ -88,6 +104,7 @@ server {
 
     # Camera: uStreamer on 127.0.0.1:8080 (ustreamer.service)
     location /webcam/ {
+        limit_conn mjpeg_viewers 2;
         postpone_output 0;
         proxy_buffering off;
         proxy_ignore_headers X-Accel-Buffering;
