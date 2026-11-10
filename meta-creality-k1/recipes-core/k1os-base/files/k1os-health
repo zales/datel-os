@@ -1,13 +1,38 @@
 #!/bin/sh
 # One line about the state of the system for the journal: load, free memory,
-# RAM held by tmpfs (the journal lives there), the biggest processes and the
-# Wi-Fi signal. When the printer hangs, the last of these lines tell whether
-# it ran out of memory, was overloaded or was losing its network first.
-# "<5>" is the syslog priority "notice".
+# RAM held by tmpfs (the journal lives there), the biggest processes, the
+# Wi-Fi signal and what Klipper measures (board MCU and chamber temperature,
+# heaters, stepper driver flags, serial retransmits to the three MCUs). When
+# the printer hangs, the last of these lines tell whether it ran out of
+# memory, was overloaded, was getting hot or was losing its network first.
+# The SoC has no temperature sensor the kernel exposes; the MCU on the same
+# board is the nearest reading. "<5>" is the syslog priority "notice".
 load=$(cut -d' ' -f1-3 /proc/loadavg)
 mem=$(awk '/^MemAvailable:/ {printf "%d", $2 / 1024}' /proc/meminfo)
 tmpfs=$(df -k 2>/dev/null | awk '$1 == "tmpfs" || $1 == "devtmpfs" {s += $3} END {printf "%d", s / 1024}')
 top=$(awk '/^Name:/ {n = $2} /^VmRSS:/ {printf "%d %s\n", $2 / 1024, n}' /proc/[0-9]*/status 2>/dev/null |
       sort -rn | awk 'NR <= 4 {printf "%s%s:%sM", (NR > 1 ? "," : ""), $2, $1}')
 wifi=$(iw dev wlan0 link 2>/dev/null | awk '/signal:/ {print $2 "dBm"}')
-echo "<5>load=$load mem_avail=${mem}M tmpfs=${tmpfs}M top=$top wifi=${wifi:-down}"
+
+q='temperature_sensor%20mcu_temp=temperature&temperature_sensor%20chamber_temp=temperature'
+q="$q&heater_bed=temperature&extruder=temperature&print_stats=state"
+q="$q&tmc2209%20stepper_x=drv_status&tmc2209%20stepper_y=drv_status&tmc2209%20stepper_z=drv_status&tmc2209%20extruder=drv_status"
+q="$q&mcu=last_stats&mcu%20nozzle_mcu=last_stats&mcu%20leveling_mcu=last_stats"
+j=$(wget -T 3 -qO- "http://127.0.0.1:7125/printer/objects/query?$q" 2>/dev/null)
+if [ -n "$j" ]; then
+    temp() { echo "$j" | sed -n "s/.*\"$1\":{\"temperature\":\\([-0-9.]*\\).*/\\1/p"; }
+    state=$(echo "$j" | sed -n 's/.*"print_stats":{"state":"\([a-z]*\)".*/\1/p')
+    # A driver reports only the flags that are set. cs_actual (current scale)
+    # and stst (standstill) are normal; anything else (otpw, ot, s2ga, ola...)
+    # is worth a look.
+    tmc=$(echo "$j" | grep -o '"tmc2209 [a-z_]*":{"drv_status":{[^}]*}' |
+          sed -e 's/"tmc2209 //' -e 's/":{"drv_status":{/:/' -e 's/}$//' \
+              -e 's/"cs_actual":[0-9]*,\{0,1\}//' -e 's/"stst":[0-9]*,\{0,1\}//' \
+              -e 's/"\([a-z0-9_]*\)":[0-9]*/\1/g' -e 's/,$//' | grep -v ':$' | tr '\n' ' ')
+    retx=$(echo "$j" | grep -o '"bytes_retransmit":[0-9]*' | cut -d: -f2 | tr '\n' '/')
+    klipper="print=${state:-?} mcu=$(temp 'temperature_sensor mcu_temp')C chamber=$(temp 'temperature_sensor chamber_temp')C"
+    klipper="$klipper bed=$(temp heater_bed)C nozzle=$(temp extruder)C tmc=${tmc:-ok} retx=${retx%/}"
+else
+    klipper="klipper=unreachable"
+fi
+echo "<5>load=$load mem_avail=${mem}M tmpfs=${tmpfs}M top=$top wifi=${wifi:-down} $klipper"
