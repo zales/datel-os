@@ -1,9 +1,14 @@
 [Unit]
 Description=Wi-Fi (wpa_supplicant on wlan0, config in /usr/data/k1os)
+# Starts as soon as wlan0 and /usr/data/k1os exist (about 10 s into the boot),
+# not after basic.target: association and DHCP then overlap with the rest of
+# userspace instead of following it.
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target network.target
 Requires=k1os-datadir.service sys-subsystem-net-devices-wlan0.device
 BindsTo=sys-subsystem-net-devices-wlan0.device
 After=k1os-datadir.service sys-subsystem-net-devices-wlan0.device
-Before=network.target
 Wants=network.target
 
 [Service]

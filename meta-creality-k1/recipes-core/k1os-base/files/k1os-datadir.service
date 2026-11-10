@@ -1,6 +1,14 @@
 [Unit]
 Description=Prepare the Datel OS namespace on /usr/data
-RequiresMountsFor=/usr/data
+# Runs as soon as /usr/data is mounted (about 10 s into the boot), not after
+# basic.target: Wi-Fi waits for wpa_supplicant.conf and sshd for the host keys
+# below /usr/data/k1os, so everything behind them starts earlier too.
+# sshdgenkeys must see the persistent keys, or it generates its own.
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target sshdgenkeys.service
+Requires=usr-data.mount
+After=usr-data.mount k1os-mcu-update.service
 ConditionPathIsDirectory=/usr/data
 
 [Service]

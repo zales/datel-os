@@ -1,8 +1,10 @@
 [Unit]
 Description=Moonraker API server for Klipper
+# No network-online.target: Moonraker listens on 0.0.0.0 and its Python
+# start-up (15-20 s on the X2000) overlaps with the Wi-Fi association
+# instead of waiting for it.
 Requires=k1os-datadir.service
-After=k1os-datadir.service network-online.target klipper.service
-Wants=network-online.target
+After=k1os-datadir.service network.target klipper.service
 
 [Service]
 Type=simple
