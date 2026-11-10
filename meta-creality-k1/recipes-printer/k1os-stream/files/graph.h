@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "moonraker.h"
+#include "sysstat.h"
 
 #define GRAPH_W 320
 #define GRAPH_H 128
@@ -33,6 +34,14 @@ struct graph {
  * bar of bar_h rows. Returns -1 when the frame is too small. */
 int graph_init(struct graph *g, unsigned width, unsigned height, unsigned bar_h,
                enum graph_corner corner);
+/* Place a second panel of the same size next to `other`: under it, or above
+ * it when there is no room below (bottom corners). Returns -1 when neither fits. */
+int graph_init_beside(struct graph *g, const struct graph *other, unsigned height, unsigned bar_h);
+/* Render the statistics panel: temperatures the graph does not show, speed
+ * and flow, Z and fan, the printer's CPU and memory, Wi-Fi and the stream's
+ * bitrate (kbit <= 0: not known yet). Once a second. */
+void stats_render(struct graph *g, const struct printer_state *st, const struct sys_stats *sys,
+                  double kbit);
 /* Render the panel from the latest state and history (once a second). */
 void graph_render(struct graph *g, const struct printer_state *st, const struct temp_history *h);
 /* Compose the panel into frame buffer `buf` (0..GRAPH_BUFS-1): y and uv are

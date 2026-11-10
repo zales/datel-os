@@ -16,7 +16,12 @@
 
 #include "moonraker.h"
 
-#define QUERY "/printer/objects/query?print_stats&display_status&extruder&heater_bed"
+#define QUERY "/printer/objects/query?print_stats&display_status&extruder&heater_bed" \
+              "&motion_report=live_velocity,live_extruder_velocity,live_position" \
+              "&temperature_sensor%20chamber_temp=temperature&temperature_sensor%20mcu_temp=temperature" \
+              "&output_pin%20fan0=value&fan=speed"
+/* cross-section of 1.75 mm filament, mm2 */
+#define FILAMENT_AREA 2.405
 #define STORE "/server/temperature_store?include_monitors=false"
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -35,7 +40,7 @@ static int http_get(const char *path, char *buf, size_t size)
 	struct timeval tv = { 2, 0 };
 	int fd, one = 1;
 	size_t got = 0;
-	char req[256];
+	char req[1024];
 	ssize_t n;
 
 	fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -57,7 +62,7 @@ static int http_get(const char *path, char *buf, size_t size)
 		return -1;
 	}
 	n = snprintf(req, sizeof req, "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, mr_host);
-	if (write(fd, req, n) != n) {
+	if (n < 0 || (size_t)n >= sizeof req || write(fd, req, n) != n) {
 		close(fd);
 		return -1;
 	}
@@ -151,7 +156,7 @@ static double json_number(const char *v, double dflt)
 
 static void parse(const char *doc, struct printer_state *st)
 {
-	const char *status, *ps, *ds, *ex, *hb;
+	const char *status, *ps, *ds, *ex, *hb, *o, *v;
 	const char *body = strstr(doc, "\r\n\r\n");
 
 	memset(st, 0, sizeof *st);
@@ -186,6 +191,41 @@ static void parse(const char *doc, struct printer_state *st)
 	if (hb) {
 		st->bed = json_number(json_value(hb, "temperature"), 0);
 		st->bed_target = json_number(json_value(hb, "target"), 0);
+	}
+	o = json_value(status, "temperature_sensor chamber_temp");
+	if (o && (v = json_value(o, "temperature"))) {
+		st->chamber = json_number(v, 0);
+		st->have_chamber = 1;
+	}
+	o = json_value(status, "temperature_sensor mcu_temp");
+	if (o && (v = json_value(o, "temperature"))) {
+		st->mcu_temp = json_number(v, 0);
+		st->have_mcu_temp = 1;
+	}
+	o = json_value(status, "motion_report");
+	if (o && (v = json_value(o, "live_velocity"))) {
+		double e = json_number(json_value(o, "live_extruder_velocity"), 0);
+		st->speed = json_number(v, 0);
+		st->flow = e > 0 ? e * FILAMENT_AREA : 0;   /* a retraction is not flow */
+		/* live_position is [x, y, z, e]: the third number */
+		v = json_value(o, "live_position");
+		if (v && *v == '[') {
+			const char *c1 = strchr(v, ','), *c2 = c1 ? strchr(c1 + 1, ',') : NULL;
+			if (c2) {
+				st->z = json_number(c2 + 1, 0);
+			}
+		}
+		st->have_motion = 1;
+	}
+	/* the K1 drives its part fan as output_pin fan0; a plain [fan] elsewhere */
+	o = json_value(status, "output_pin fan0");
+	v = o ? json_value(o, "value") : NULL;
+	if (!v && (o = json_value(status, "fan"))) {
+		v = json_value(o, "speed");
+	}
+	if (v) {
+		st->fan = json_number(v, 0);
+		st->have_fan = 1;
 	}
 	st->valid = 1;
 }

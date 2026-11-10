@@ -40,6 +40,8 @@ static const struct color GREEN  = { 140,  96,  75 };   /* progress */
 static const struct color GRAY   = { 150, 128, 128 };   /* bar frame, ticks */
 static const struct color DIM    = { 110, 128, 128 };   /* grid lines */
 static const struct color LABEL  = { 180, 128, 128 };   /* axis label */
+static const struct color WHITE  = { 235, 128, 128 };   /* values in the statistics panel */
+static const struct color WARN   = { 190, 100, 180 };   /* a value worth a look, orange */
 
 int graph_init(struct graph *g, unsigned width, unsigned height, unsigned bar_h,
                enum graph_corner corner)
@@ -64,6 +66,23 @@ int graph_init(struct graph *g, unsigned width, unsigned height, unsigned bar_h,
 		memset(g->bg_luma[i], 16, sizeof g->bg_luma[i]);
 		memset(g->bg_uv[i], 128, sizeof g->bg_uv[i]);
 	}
+	return 0;
+}
+
+int graph_init_beside(struct graph *g, const struct graph *other, unsigned height, unsigned bar_h)
+{
+	unsigned gap = 8, margin = 16, y0;
+
+	if (other->y0 + 2 * GRAPH_H + gap + margin + bar_h <= height) {
+		y0 = other->y0 + GRAPH_H + gap;
+	} else if (other->y0 >= GRAPH_H + gap + margin) {
+		y0 = other->y0 - GRAPH_H - gap;
+	} else {
+		return -1;
+	}
+	memcpy(g, other, sizeof *g);        /* stride, darkening table, cleared planes */
+	g->x0 = other->x0;
+	g->y0 = y0 & ~1u;
 	return 0;
 }
 
@@ -277,6 +296,69 @@ void graph_render(struct graph *g, const struct printer_state *st, const struct 
 		unsigned w = overlay_text_width(1, text);
 		overlay_text(1, g->luma, g->mask, GRAPH_W, GRAPH_W, BAR_X + BAR_W - 6 - w, TEXT_Y, text);
 	}
+}
+
+/* ------------------------------------------------------------------ */
+/* statistics panel                                                    */
+
+/* Five rows of 12x24 text in two columns: a grey label and its value in
+ * white, or in orange when it is worth a look (board from 70 degrees, CPU
+ * from 90 %, memory from 85 %, Wi-Fi from -80 dBm down). The longest pair,
+ * "Speed 800mm/s", ends 14 px before the second column. */
+#define STAT_ROWS 5
+#define STAT_Y0 4
+#define STAT_COL0 2
+#define STAT_COL1 (GRAPH_W / 2 + 8)
+#define STAT_GAP 8           /* between a label and its value */
+
+static void stat(struct graph *g, int row, int col, const char *label, const char *value,
+                 const struct color *c)
+{
+	int x = col ? STAT_COL1 : STAT_COL0, y = STAT_Y0 + row * 24;
+	text_color(g, 0, x, y, label, &LABEL);
+	text_color(g, 0, x + (int)overlay_text_width(0, label) + STAT_GAP, y, value, c);
+}
+
+void stats_render(struct graph *g, const struct printer_state *st, const struct sys_stats *sys,
+                  double kbit)
+{
+	char v[32];
+	int ok = st->valid;
+
+	memset(g->luma, 0, sizeof g->luma);
+	memset(g->mask, 0, sizeof g->mask);
+	memset(g->uv, 128, sizeof g->uv);
+	memset(g->uvmask, 0, sizeof g->uvmask);
+
+	/* row 0: the temperatures the graph does not show */
+	if (ok && st->have_chamber) snprintf(v, sizeof v, "%.0f\xC2\xB0", st->chamber); else snprintf(v, sizeof v, "--");
+	stat(g, 0, 0, "Chamber", v, &WHITE);
+	if (ok && st->have_mcu_temp) snprintf(v, sizeof v, "%.0f\xC2\xB0", st->mcu_temp); else snprintf(v, sizeof v, "--");
+	stat(g, 0, 1, "Board", v, ok && st->have_mcu_temp && st->mcu_temp >= 70 ? &WARN : &WHITE);
+
+	/* row 1: how fast the head moves and how much plastic it lays down */
+	if (ok && st->have_motion) snprintf(v, sizeof v, "%.0fmm/s", st->speed); else snprintf(v, sizeof v, "--");
+	stat(g, 1, 0, "Speed", v, &WHITE);
+	if (ok && st->have_motion) snprintf(v, sizeof v, "%.0fmm3/s", st->flow); else snprintf(v, sizeof v, "--");
+	stat(g, 1, 1, "Flow", v, &WHITE);
+
+	/* row 2: height and part cooling */
+	if (ok && st->have_motion) snprintf(v, sizeof v, "%.2fmm", st->z); else snprintf(v, sizeof v, "--");
+	stat(g, 2, 0, "Z", v, &WHITE);
+	if (ok && st->have_fan) snprintf(v, sizeof v, "%.0f%%", st->fan * 100.0); else snprintf(v, sizeof v, "--");
+	stat(g, 2, 1, "Fan", v, &WHITE);
+
+	/* row 3: the printer's computer */
+	if (sys->cpu_pct >= 0) snprintf(v, sizeof v, "%d%%", sys->cpu_pct); else snprintf(v, sizeof v, "--");
+	stat(g, 3, 0, "CPU", v, sys->cpu_pct >= 90 ? &WARN : &WHITE);
+	if (sys->mem_total_mb) snprintf(v, sizeof v, "%d/%dM", sys->mem_used_mb, sys->mem_total_mb); else snprintf(v, sizeof v, "--");
+	stat(g, 3, 1, "RAM", v, sys->mem_total_mb && sys->mem_used_mb * 100 >= sys->mem_total_mb * 85 ? &WARN : &WHITE);
+
+	/* row 4: the link the stream leaves through */
+	if (sys->wifi_dbm) snprintf(v, sizeof v, "%ddBm", sys->wifi_dbm); else snprintf(v, sizeof v, "--");
+	stat(g, 4, 0, "Wi-Fi", v, sys->wifi_dbm && sys->wifi_dbm <= -80 ? &WARN : &WHITE);
+	if (kbit > 0) snprintf(v, sizeof v, "%.1fMbit", kbit / 1000.0); else snprintf(v, sizeof v, "--");
+	stat(g, 4, 1, "Out", v, &WHITE);
 }
 
 /* ------------------------------------------------------------------ */

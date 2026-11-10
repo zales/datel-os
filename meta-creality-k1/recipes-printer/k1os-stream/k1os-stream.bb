@@ -11,7 +11,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 
 SRC_URI = "file://Makefile file://k1os-stream.c file://helix.c file://helix.h \
            file://overlay.c file://overlay.h file://moonraker.c file://moonraker.h \
-           file://graph.c file://graph.h \
+           file://graph.c file://graph.h file://sysstat.c file://sysstat.h \
            file://font12x24.h file://font16x32.h file://jpeg_dht.h file://bdf2c.py file://LICENSE.spleen \
            file://k1os-twitch file://k1os-twitch.service file://k1os-twitch-autostart.service \
            file://k1os-twitch-asvc file://k1os-h264-source file://moonraker-k1os-twitch.conf file://twitch.env.example \
