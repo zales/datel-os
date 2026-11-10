@@ -14,6 +14,8 @@ ExecStart=/usr/bin/python3 /usr/share/klipper/klippy/klippy.py \
 Restart=always
 RestartSec=10
 Nice=-10
+# Out of memory, the print is the last thing to lose (the camera goes first).
+OOMScoreAdjust=-900
 
 [Install]
 WantedBy=multi-user.target

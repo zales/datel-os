@@ -76,6 +76,7 @@ do_configure:append() {
 do_configure:append() {
     for opt in CONFIG_DT_X2000_MODULE_BASE=y 'CONFIG_DT_X2000_MODULE_BASE_DTS_FILE="x2000/creality_k1.dts"' \
                CONFIG_SQUASHFS_XZ=y CONFIG_TOUCHSCREEN_GOODIX=y CONFIG_BRCMFMAC=m 'CONFIG_EXTRA_FIRMWARE="regulatory.db regulatory.db.p7s"' \
+               CONFIG_LRU_GEN=y CONFIG_LRU_GEN_ENABLED=y CONFIG_ZRAM=y \
                CONFIG_VIDEO_INGENIC_VCODEC=y CONFIG_INGENIC_HELIX=y CONFIG_INGENIC_HELIX_H264E_RC_NONE=y; do
         grep -qx "$opt" ${B}/.config || bbfatal "kernel config is missing $opt"
     done

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Compressed swap in RAM, half the size of the RAM.
+#
+# Without swap the kernel can only free memory by dropping program code,
+# which it then has to read back from the xz-compressed root file system:
+# a printer short of memory does not slow down, it stops answering. With
+# zram, data that is not in use is compressed in place instead (lz4, usually
+# to a third), so the code stays in memory and a shortage builds up
+# gradually. The pages come back in microseconds, not through xz.
+dev=/sys/block/zram0
+[ -e "$dev/disksize" ] || { echo "no zram in this kernel"; exit 0; }
+grep -q '^/dev/zram0 ' /proc/swaps && exit 0
+kb=$(awk '/^MemTotal:/ {print int($2 / 2)}' /proc/meminfo)
+echo lz4 > "$dev/comp_algorithm" 2>/dev/null
+echo "${kb}K" > "$dev/disksize" || exit 1
+mkswap /dev/zram0 > /dev/null || exit 1
+exec swapon -p 100 /dev/zram0

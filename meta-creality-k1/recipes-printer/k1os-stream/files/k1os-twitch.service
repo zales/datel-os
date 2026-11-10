@@ -17,4 +17,6 @@ TimeoutStopSec=10
 SuccessExitStatus=143
 # The key stays in twitch.env (root, 0600); nothing here or in the logs names it.
 Nice=5
+# Out of memory, the Twitch stream is the first to go.
+OOMScoreAdjust=700
 
