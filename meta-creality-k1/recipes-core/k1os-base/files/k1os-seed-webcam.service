@@ -2,7 +2,9 @@
 Description=Datel OS: register the camera in Moonraker once
 Requires=usr-data.mount
 After=usr-data.mount moonraker.service
-ConditionPathExists=!/usr/data/k1os/webcam-seeded
+# Runs while any of its one-time steps has no marker yet.
+ConditionPathExists=|!/usr/data/k1os/webcam-seeded
+ConditionPathExists=|!/usr/data/k1os/webcam-seeded-webrtc
 
 [Service]
 Type=oneshot

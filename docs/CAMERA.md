@@ -13,9 +13,23 @@ CAMERA_FPS=8
 
 and restart with `systemctl restart ustreamer`. Keep the frame rate in Mainsail's camera settings in step.
 
+### Cameras in Mainsail
+
+Moonraker gets three cameras, all from the same camera:
+
+| Camera | Player | Bandwidth | Notes |
+|---|---|---|---|
+| **K1 (WebRTC)** | `webrtc-go2rtc` | about 2.5 Mbit/s | H.264 from the Helix codec through [go2rtc](https://github.com/AlexxIT/go2rtc), the same picture and encoder as the Twitch stream (overlay included). Mainsail's camera on first boot |
+| **K1** | `mjpegstreamer` | about 6 Mbit/s | The MJPEG stream from uStreamer, no re-encoding |
+| **K1 (snapshots)** | `mjpegstreamer-adaptive` | depends on the link | Snapshot polling at up to 5 fps, for slow links |
+
+Mainsail shows every camera at once until one is picked, and the pick is stored for all browsers; the first boot picks **K1 (WebRTC)**, an update from an older release does that once as well.
+
+go2rtc starts the encoder (`/usr/libexec/k1os/h264-source`: `ustreamer-dump | k1os-stream`) for the first viewer and stops it after the last one leaves, so the WebRTC camera costs nothing while nobody watches. The picture follows the Twitch settings in `/usr/data/k1os/twitch.env` (bitrate, frame rate, overlay); changing them in the TWITCH dialog restarts go2rtc, and an open WebRTC view reconnects. go2rtc's API listens on localhost only; nginx passes on `/go2rtc/api/ws?src=k1` and nothing else, and the video goes over UDP/TCP port 8555.
+
 ### OrcaSlicer
 
-OrcaSlicer's device tab on macOS is an embedded WebKit browser. WebKit fails a `fetch()` of a `multipart/x-mixed-replace` body ("Load failed"), and Mainsail's MJPEG player reads the stream with `fetch()`, so it reported "Error while connecting to …/webcam/?action=stream". nginx now labels the same bytes `multipart/mixed` for that request (Mainsail's worker sends `Accept: */*` and `?timestamp=`); an `<img>` or a browser tab still gets `multipart/x-mixed-replace`. Both cameras, **K1** and **K1 (snapshots)**, work there.
+OrcaSlicer's device tab on macOS is an embedded WebKit browser. WebKit fails a `fetch()` of a `multipart/x-mixed-replace` body ("Load failed"), and Mainsail's MJPEG player reads the stream with `fetch()`, so it reported "Error while connecting to …/webcam/?action=stream". nginx now labels the same bytes `multipart/mixed` for that request (Mainsail's worker sends `Accept: */*` and `?timestamp=`); an `<img>` or a browser tab still gets `multipart/x-mixed-replace`. All three cameras work there, **K1 (WebRTC)** included.
 
 ## Timelapse
 

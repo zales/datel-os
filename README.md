@@ -14,7 +14,7 @@ Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, K
 | System | Yocto scarthgap, systemd, read-only squashfs root, data in `/usr/data/k1os`, A/B slots with a trial boot that falls back to the other slot |
 | Printing | Kalico with open firmware on all three MCUs, load cell probe, verified prints |
 | Web UI | Moonraker and Mainsail behind nginx, printer name and camera registered on first boot |
-| Camera | 720p MJPEG through uStreamer, a snapshot camera for OrcaSlicer's embedded browser |
+| Camera | 720p MJPEG through uStreamer, H.264 over WebRTC through go2rtc from the Helix codec (shared with the Twitch stream), a snapshot camera for slow links |
 | Timelapse | moonraker-timelapse with the render on the X2000 Helix hardware encoder |
 | Twitch | Live stream with a status bar and temperature graph in the picture, controlled from Mainsail, automatic stream title |
 | Updates | Write the inactive slot over SSH, trial boot, GitHub Releases from tags |
@@ -96,6 +96,7 @@ Our code, recipes, scripts, documentation and artwork are under the MIT license 
 | Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware) |
 | Moonraker, Mainsail, moonraker-timelapse | GPL-3.0 | upstream |
 | uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
+| go2rtc 1.9.15 (release binary, linux/mipsle) | MIT | [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) |
 | ffmpeg 6.1 (muxing only, no x264) | LGPL-2.1 / GPL-2.0 | poky |
 | Spleen bitmap font | BSD-2-Clause | [fcambus/spleen](https://github.com/fcambus/spleen) |
 | GuppyScreen | GPL-3.0, MIT, BSD-3 | upstream |

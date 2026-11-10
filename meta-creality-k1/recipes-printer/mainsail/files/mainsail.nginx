@@ -69,6 +69,23 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    # Camera as H.264 over WebRTC: go2rtc on 127.0.0.1:1984 (go2rtc.service).
+    # Mainsail's webrtc-go2rtc player only needs the signalling WebSocket; the
+    # video then goes over UDP/TCP 8555. Only the stream "k1": go2rtc builds a
+    # stream from any source URL in src=, an exec: one included.
+    location = /go2rtc/api/ws {
+        if ($arg_src != "k1") {
+            return 403;
+        }
+        access_log off;
+        proxy_pass http://127.0.0.1:1984;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $http_host;
+        proxy_read_timeout 1d;
+    }
+
     # Camera: uStreamer on 127.0.0.1:8080 (ustreamer.service)
     location /webcam/ {
         postpone_output 0;

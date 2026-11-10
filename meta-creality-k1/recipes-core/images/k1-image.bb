@@ -32,6 +32,8 @@ IMAGE_INSTALL += "kalico moonraker mainsail guppyscreen nginx ustreamer"
 IMAGE_INSTALL += "moonraker-timelapse k1os-helix"
 # Twitch live stream with a status overlay (k1os-stream on the Helix codec, ffmpeg for RTMP).
 IMAGE_INSTALL += "k1os-stream"
+# The camera as H.264 over WebRTC in Mainsail, from the same encoder as Twitch.
+IMAGE_INSTALL += "go2rtc"
 
 IMAGE_ROOTFS_EXTRA_SPACE = "0"
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=go2rtc: the camera as H.264 over WebRTC (Mainsail) and for the Twitch stream
+After=network.target ustreamer.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/go2rtc -config /etc/go2rtc.yaml
+# The K1 has 216 MB of RAM; keep the Go heap small (idle RSS is about 24 MB).
+Environment=GOMEMLIMIT=32MiB
+Restart=on-failure
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
