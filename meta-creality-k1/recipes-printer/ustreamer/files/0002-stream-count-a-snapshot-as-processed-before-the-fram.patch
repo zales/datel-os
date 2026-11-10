@@ -1,0 +1,41 @@
+stream: count a snapshot as processed before the frame is exposed
+
+A snapshot request waits until snapshot_requested is back at zero. The
+JPEG thread exposed the frame first, which wakes the HTTP thread
+(event_active on the refresher), and decremented the counter afterwards,
+after the copy into the memory sink. When the HTTP thread got there
+first it still saw the counter above zero and left the client waiting;
+the JPEG thread then found nobody watching and exposed no further frame,
+so nothing woke the HTTP thread again and the request hung until the
+client gave up (the timeout in _http_send_snapshot is only checked when
+a frame arrives).
+
+It needs a moment when nobody else is watching: no stream client and no
+reader of the sink. On the K1 (two cores) 1 request in 40 hung on an
+idle printer and 25 in 150 with both cores busy; 4 of 8 right after
+boot. The timelapse takes its frames this way, one per layer.
+
+Upstream-Status: Pending
+---
+diff --git a/src/ustreamer/stream.c b/src/ustreamer/stream.c
+index 43a6131..c59e585 100644
+--- a/src/ustreamer/stream.c
++++ b/src/ustreamer/stream.c
+@@ -343,10 +343,16 @@ static void *_jpeg_thread(void *v_ctx) {
+ 			if (wr->job_failed) {
+ 				// pass
+ 			} else if (wr->job_timely) {
+-				_stream_expose_jpeg(stream, job->dest);
++				// Count the snapshot as processed before the frame is exposed:
++				// exposing wakes the HTTP thread, which answers a snapshot
++				// only when the counter is back at zero. Counted afterwards,
++				// the HTTP thread can look first, leave the client waiting,
++				// and with nobody else watching no further frame comes to
++				// wake it again.
+ 				if (atomic_load(&stream->run->http->snapshot_requested) > 0) { // Process real snapshots
+ 					atomic_fetch_sub(&stream->run->http->snapshot_requested, 1);
+ 				}
++				_stream_expose_jpeg(stream, job->dest);
+ 				US_LOG_PERF("JPEG: ##### Encoded JPEG exposed; worker=%s, latency=%.3Lf",
+ 					wr->name, us_get_now_monotonic() - job->dest->grab_begin_ts);
+ 			} else {
