@@ -96,7 +96,7 @@ Our code, recipes, scripts, documentation and artwork are under the MIT license 
 | Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware) |
 | Moonraker, Mainsail, moonraker-timelapse | GPL-3.0 | upstream |
 | uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
-| go2rtc 1.9.15 (release binary, linux/mipsle) | MIT | [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) |
+| go2rtc 1.9.15 (built from source, one patch: a byte limit on the queue for a slow viewer) | MIT | [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) |
 | ffmpeg 6.1 (muxing only, no x264) | LGPL-2.1 / GPL-2.0 | poky |
 | Spleen bitmap font | BSD-2-Clause | [fcambus/spleen](https://github.com/fcambus/spleen) |
 | GuppyScreen | GPL-3.0, MIT, BSD-3 | upstream |
