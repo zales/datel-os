@@ -1,0 +1,10 @@
+[Unit]
+Description=Datel OS: one line about load, memory and Wi-Fi for the journal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/k1os/health
+SyslogIdentifier=k1os-health
+# Only the line itself (priority notice), not "Starting"/"Finished" every minute.
+LogLevelMax=notice
+Nice=10

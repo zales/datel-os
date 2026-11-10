@@ -6,7 +6,8 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=d32239bcb673463ab874e80d47fae504"
 SRC_URI = "git://github.com/pikvm/ustreamer.git;protocol=https;branch=master \
            file://k1os-camera-device \
            file://k1os-camera-stream \
-           file://ustreamer.service"
+           file://ustreamer.service \
+           file://0001-capture-missing-JPEG-quality-control-is-not-an-error.patch"
 SRCREV = "0e64f1fedab4030c7bf58a287c462e21919c1d48"
 S = "${WORKDIR}/git"
 

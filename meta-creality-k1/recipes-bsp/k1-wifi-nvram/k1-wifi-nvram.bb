@@ -17,6 +17,10 @@ do_install() {
         "${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.creality,k1.txt"
     ln -sf "brcmfmac43430-sdio.creality,k1.txt" \
         ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.txt
+    # The firmware is asked for under the board name first as well; without
+    # this link every boot logs a failed load before the generic name works.
+    ln -sf brcmfmac43430-sdio.bin \
+        "${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.creality,k1.bin"
 }
 
 FILES:${PN} = "${nonarch_base_libdir}/firmware/brcm"
