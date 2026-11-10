@@ -15,6 +15,18 @@ LOG=$RUN/mcu-update.log
 mkdir -p "$RUN"
 log() { echo "$(date '+%T') $*" | tee -a "$LOG"; }
 
+# Over a reboot the MCUs keep their power and go on running their application:
+# no bootloader answers then, and the full wait for one (20 s) would hold up
+# the whole boot, this unit being ordered before sysinit.target. The RTC loses
+# its state together with the board's power and the kernel says so ("rtc
+# power on reset"). Without that line this is a reboot and a short probe is
+# enough; a bootloader that is there after all still answers it.
+QUICK=
+if ! dmesg | grep -q 'rtc power on reset'; then
+    QUICK=--quick
+    log "reboot without a power cycle: short bootloader probe"
+fi
+
 one() {
     port=$1; board=$2
     n=0
@@ -22,7 +34,7 @@ one() {
     if [ ! -e "$port" ]; then
         log "$board: $port missing"; echo 1 > "$RUN/mcu-update.$board"; return
     fi
-    out=$($FLASH "$port" sync "$FW" 2>&1); rc=$?
+    out=$($FLASH $QUICK "$port" sync "$FW" 2>&1); rc=$?
     echo "$out" | while IFS= read -r line; do log "$board: ${line#k1os-mcu-flash: }"; done
     if [ $rc -eq 3 ]; then
         log "$board: skipped (power-cycle the printer to update it)"; rc=0

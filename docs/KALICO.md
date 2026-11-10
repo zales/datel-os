@@ -13,7 +13,7 @@ Datel OS prints with Kalico and loads open firmware into all three MCUs; Crealit
 
 MCUs: mainboard GD32F303xE (`/dev/ttyS7`), nozzle GD32F303xB (`/dev/ttyS1`), bed leveling GD32E230x8 (`/dev/ttyS9`), all at 230400 baud.
 
-Firmware updates happen only on a cold start: the bootloader waits about 15 s after power-on, and a running Klipper cannot be sent into it. After a plain reboot the MCUs keep the firmware they have and `k1os-mcu-update` logs them as skipped. The bed MCU keeps streaming sensor frames after the host is gone, so its port is never quiet; the probe takes only a plausible version string as a bootloader answer.
+Firmware updates happen only on a cold start: the bootloader waits about 15 s after power-on, and a running Klipper cannot be sent into it. After a plain reboot the MCUs keep the firmware they have and `k1os-mcu-update` logs them as skipped; it knows a reboot by the missing `rtc power on reset` line in the kernel log (the RTC loses its state only with the board's power) and then probes each port for about 2 s instead of 20 s, so the boot does not wait for bootloaders that cannot answer. The bed MCU keeps streaming sensor frames after the host is gone, so its port is never quiet; the probe takes only a plausible version string as a bootloader answer.
 
 ## What the configuration conversion does
 

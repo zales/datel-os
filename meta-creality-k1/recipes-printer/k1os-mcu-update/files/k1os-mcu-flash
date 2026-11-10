@@ -18,6 +18,9 @@ Written from the observed protocol (also used by Creality's own updater):
   application: every command below ends by starting it.
 
 Usage:
+  k1os-mcu-flash [--quick] PORT ...     --quick: look for the bootloader for
+                                        about 2 s instead of 20 s (after a
+                                        reboot, when the applications run)
   k1os-mcu-flash PORT sync DIR          bring PORT to the image in DIR whose
                                         name starts with the MCU's <hw>, then
                                         start the application
@@ -32,6 +35,11 @@ import serial
 
 NO_BOOTLOADER = 3
 WAIT = 20.0  # seconds spent looking for the bootloader before giving up
+TIMEOUT = 2.0  # seconds to wait for a reply
+# --quick: a bootloader answers within milliseconds, so two short rounds are
+# enough to see that none is there.
+QUICK_WAIT = 2.0
+QUICK_TIMEOUT = 0.5
 
 
 def crc(data):
@@ -49,7 +57,7 @@ class Bootloader:
 
     def open(self, baud):
         self.close()
-        self.ser = serial.Serial(self.port, baudrate=baud, timeout=2.0)
+        self.ser = serial.Serial(self.port, baudrate=baud, timeout=TIMEOUT)
 
     def close(self):
         if self.ser is not None:
@@ -66,7 +74,7 @@ class Bootloader:
             time.sleep(0.2)
         return None
 
-    def connect(self, wait=WAIT):
+    def connect(self, wait=WAIT, timeout=TIMEOUT):
         """Find the bootloader: a fresh one answers the handshake, one that
         was already handshaked (by an earlier process) answers a version
         request instead. A running application answers neither, but it is
@@ -74,14 +82,19 @@ class Bootloader:
         after the host has gone, which at 115200 reads as an endless noise
         stream where a 0x75 byte or a 26-byte frame with the right crc turns
         up within seconds. So the port counts as a bootloader only when it
-        answers a version request with a plausible version string."""
+        answers a version request with a plausible version string.
+        'timeout' is the reply timeout while looking; a bootloader that was
+        found is then talked to with the normal one (a flash sector takes
+        longer than a hello)."""
         self.open(115200)
+        self.ser.timeout = timeout
         deadline = time.monotonic() + wait
         while True:
             self.ser.reset_input_buffer()
             self.ser.write(b"\x75")
             hello = self.ser.read(1) == b"\x75"
             if self.version(tries=3 if hello else 1) is not None:
+                self.ser.timeout = TIMEOUT
                 return True
             if time.monotonic() > deadline:
                 return False
@@ -174,13 +187,17 @@ def finish(bl, ok):
 
 
 def main(argv):
+    quick = len(argv) > 1 and argv[1] == "--quick"
+    if quick:
+        argv = argv[:1] + argv[2:]
     if len(argv) < 3:
         print(__doc__)
         return 2
     port, cmd = argv[1], argv[2]
     bl = Bootloader(port)
     try:
-        if not bl.connect():
+        found = bl.connect(QUICK_WAIT, QUICK_TIMEOUT) if quick else bl.connect()
+        if not found:
             log("%s: no bootloader (the application is running)" % port)
             return NO_BOOTLOADER
         if cmd == "start":
