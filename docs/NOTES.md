@@ -69,6 +69,13 @@ Stock Creality recorded its timelapse with the X2000's Helix block: its Klipper 
 - Found on the way: Moonraker's service control needs `sudo` in the image even as root, and a static unit that was never started is not listed, so it needs an ordering reference from a started unit. The Twitch player embeds only into HTTPS pages from listed hosts, so the iframe webcam stays black with Mainsail on HTTP.
 - An early crash of the streamer when a timelapse render started was its own JPEG parser bug, fixed; it was not a codec conflict.
 
+## 9 November 2026: Mainsail stalls on connect
+
+- Every time Mainsail connected, Moonraker logged `EVENT LOOP BLOCKED` for 6-9 s and the UI looked dead, worst during the start of a print when Klipper keeps one of the two cores busy. Cause: `server.files.list` and `server.files.get_directory` build the listing on the event loop thread (`os.walk`, a `stat()` per file, the in-memory metadata cache); with 273 files in `gcodes` since December 2023 that took 2.0 s and 2.7 s on the X2000 (0.3 s and 0.4 s with 34 files). Moonraker v0.11.0 upstream.
+- Fix in the Moonraker recipe: `0001-file_manager-build-file-listings-off-the-event-loop.patch` runs both listings through `event_loop.run_in_thread`, the way the move and copy handlers already do. Nothing else in the handlers touches state that needs the loop thread.
+- The old files were moved to `/usr/data/gcode-archive` on the printer (outside Moonraker's roots).
+- Unrelated, same day: the bed `max_temp` of the stock S12 config is 115 and the ASA profile asked for exactly 115; a 0.1 degree overshoot shut the MCU down. The printer now runs with 120 (stock S11 ships 120, S10 125, same heater and thermistor).
+
 ## 9 November 2026: boot time
 
 - Measured on v0.3.1 from the journal (`systemd-analyze` is not in the image; `systemctl show` gives the same stamps). Seconds from the kernel start, the stock bootloader before it is not measured (J1 console): root mounted 1.3, systemd 2.6, `basic.target` 11.6, `k1os-wifi` 12.5 (wlan0 existed from 9.3), Wi-Fi associated 16.2 and DHCP 16.9, Klipper start 13.8 with "Start printer" at 25.8, Moonraker start 17.3 with the HTTP server up at 45.6, Klippy ready in Mainsail at 47.

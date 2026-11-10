@@ -1,0 +1,52 @@
+From 0df80f380e88ca8472a0de1942692399ce16ca15 Mon Sep 17 00:00:00 2001
+From: Ondrej Zalesky <o.zalesky@gmail.com>
+Date: Mon, 9 Nov 2026 14:05:39 +0100
+Subject: [PATCH] file_manager: build file listings off the event loop
+
+The server.files.list and server.files.get_directory handlers walked the
+root and called stat() on every file on the event loop thread.  Mainsail
+sends both on every connect; with a few hundred files in gcodes that
+blocked Moonraker for 2-3 s on the Ingenic X2000 (6-9 s while Klipper
+keeps a core busy at print start) and the web UI appeared to hang.
+
+Both listings only read the filesystem and the in-memory metadata cache,
+so run them in the executor the way the move and copy handlers already do.
+---
+ moonraker/components/file_manager/file_manager.py | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/moonraker/components/file_manager/file_manager.py b/moonraker/components/file_manager/file_manager.py
+index 6fe3ce3..5e55679 100644
+--- a/moonraker/components/file_manager/file_manager.py
++++ b/moonraker/components/file_manager/file_manager.py
+@@ -417,7 +417,11 @@ class FileManager:
+                                        web_request: WebRequest
+                                        ) -> List[Dict[str, Any]]:
+         root = web_request.get_str('root', "gcodes")
+-        flist = self.get_file_list(root, list_format=True)
++        # Walking a large root with a stat() per file takes seconds on a
++        # slow SoC; keep the event loop responsive meanwhile.
++        flist = await self.event_loop.run_in_thread(
++            self.get_file_list, root, True
++        )
+         return cast(List[Dict[str, Any]], flist)
+ 
+     async def _handle_metadata_request(self,
+@@ -497,8 +501,12 @@ class FileManager:
+         req_type = web_request.get_request_type()
+         if req_type == RequestType.GET:
+             is_extended = web_request.get_boolean('extended', False)
+-            # Get list of files and subdirectories for this target
+-            dir_info = self._list_directory(dir_path, root, is_extended)
++            # Get list of files and subdirectories for this target.  The
++            # listing only reads the filesystem and the in-memory metadata
++            # cache, so it can run off the event loop.
++            dir_info = await self.event_loop.run_in_thread(
++                self._list_directory, dir_path, root, is_extended
++            )
+             return dir_info
+         async with self.sync_lock:
+             self.check_reserved_path(dir_path, True)
+-- 
+2.54.0 (Apple Git-157)
+

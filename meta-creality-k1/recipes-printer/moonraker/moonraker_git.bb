@@ -9,6 +9,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=db95b6e40dc7d26d8308b6b7375637b6"
 SRC_URI = "git://github.com/Arksine/moonraker.git;protocol=https;branch=master \
            file://moonraker.service \
            file://moonraker.conf \
+           file://0001-file_manager-build-file-listings-off-the-event-loop.patch \
           "
 SRCREV = "b559b9a81161f958a43c2f527b6ad96f73310d5d"
 PV = "0.11.0+git${SRCPV}"
