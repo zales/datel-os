@@ -1,0 +1,20 @@
+The K1 camera (UVC, Sonix) encodes MJPEG itself and has no JPEG
+compression control (VIDIOC_G_JPEGCOMP fails). uStreamer passes its
+frames through unchanged, so the missing control is not an error: log it
+at debug level instead of as an ERROR on every start.
+
+Upstream-Status: Inappropriate [K1 only ships the HW pass-through path]
+---
+diff --git a/src/libs/capture.c b/src/libs/capture.c
+index 72d5531..1381bd5 100644
+--- a/src/libs/capture.c
++++ b/src/libs/capture.c
+@@ -1140,7 +1140,7 @@ static void _capture_open_jpeg_quality(us_capture_s *cap) {
+ 	if (us_is_jpeg(run->format)) {
+ 		struct v4l2_jpegcompression comp = {0};
+ 		if (us_xioctl(run->fd, VIDIOC_G_JPEGCOMP, &comp) < 0) {
+-			_LOG_ERROR("Device doesn't support setting of HW encoding quality parameters");
++			_LOG_DEBUG("Device doesn't support setting of HW encoding quality parameters");
+ 		} else {
+ 			comp.quality = cap->jpeg_quality;
+ 			if (us_xioctl(run->fd, VIDIOC_S_JPEGCOMP, &comp) < 0) {

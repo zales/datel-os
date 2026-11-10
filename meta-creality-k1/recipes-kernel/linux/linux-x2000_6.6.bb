@@ -30,9 +30,19 @@ COMPATIBLE_MACHINE = "creality-k1"
 # kernel_do_configure turns ${WORKDIR}/defconfig into .config via olddefconfig.
 # The board DT is built into the kernel by the Ingenic module_drivers build
 # (CONFIG_DT_X2000_MODULE_BASE_DTS_FILE, see k1.cfg).
+# cfg80211 is built in and loads regulatory.db one second into the boot, long
+# before the root filesystem is mounted; the copy in /lib/firmware comes too
+# late. Built into the kernel, the database is there in time. It comes from
+# wireless-regdb, the same files the image installs.
+DEPENDS += "wireless-regdb"
+REGDB_DIR = "${STAGING_DIR_HOST}${nonarch_base_libdir}/firmware"
+
 do_configure:prepend() {
     install -m 0644 ${WORKDIR}/creality_k1.dts ${S}/module_drivers/dts/x2000/creality_k1.dts
     cat ${S}/arch/mips/configs/nebulaos_halley5_v30_defconfig ${WORKDIR}/k1.cfg > ${WORKDIR}/defconfig
+    [ -f ${REGDB_DIR}/regulatory.db ] && [ -f ${REGDB_DIR}/regulatory.db.p7s ] || bbfatal "regulatory.db is missing in ${REGDB_DIR}"
+    printf '%s\n' 'CONFIG_EXTRA_FIRMWARE="regulatory.db regulatory.db.p7s"' \
+        'CONFIG_EXTRA_FIRMWARE_DIR="${REGDB_DIR}"' >> ${WORKDIR}/defconfig
     rm -f ${B}/.config
 }
 
@@ -65,7 +75,7 @@ do_configure:append() {
 # Fail the build if the K1 settings did not survive olddefconfig.
 do_configure:append() {
     for opt in CONFIG_DT_X2000_MODULE_BASE=y 'CONFIG_DT_X2000_MODULE_BASE_DTS_FILE="x2000/creality_k1.dts"' \
-               CONFIG_SQUASHFS_XZ=y CONFIG_TOUCHSCREEN_GOODIX=y CONFIG_BRCMFMAC=m 'CONFIG_EXTRA_FIRMWARE=""' \
+               CONFIG_SQUASHFS_XZ=y CONFIG_TOUCHSCREEN_GOODIX=y CONFIG_BRCMFMAC=m 'CONFIG_EXTRA_FIRMWARE="regulatory.db regulatory.db.p7s"' \
                CONFIG_VIDEO_INGENIC_VCODEC=y CONFIG_INGENIC_HELIX=y CONFIG_INGENIC_HELIX_H264E_RC_NONE=y; do
         grep -qx "$opt" ${B}/.config || bbfatal "kernel config is missing $opt"
     done
