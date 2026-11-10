@@ -59,6 +59,8 @@ SETTING_KEYS = {
     "m117": "TWITCH_M117", "autostart": "TWITCH_AUTOSTART",
 }
 PIPELINE_KEYS = ("resolution", "bitrate_kbps", "overlay", "ingest")
+# Settings of the picture itself, which go2rtc's shared encoder reads at start.
+ENCODER_KEYS = ("resolution", "bitrate_kbps", "overlay")
 # TWITCH_OVERLAY: 0 plain camera, 1 status bar, 2 status bar and graph panel
 OVERLAY_NAMES = {0: "off", 1: "text", 2: "text+graph"}
 
@@ -178,6 +180,11 @@ class K1osStream:
         self.auth_file: str = config.get("auth_file", "/usr/data/k1os/twitch-auth.json")
         self.status_file: str = config.get("status_file", "/run/k1os/twitch-status.json")
         self.service: str = config.get("service", "k1os-twitch")
+        # go2rtc runs the one encoder for Twitch and Mainsail's WebRTC camera;
+        # it reports its rate here, and takes new picture settings on a restart.
+        self.encoder_service: str = config.get("encoder_service", "go2rtc")
+        self.encoder_status_file: str = config.get(
+            "encoder_status_file", "/run/k1os/stream-status.json")
         self.title_interval: float = config.getfloat("title_interval", 60.0)
         self.klippy_apis: KlippyAPI = self.server.lookup_component("klippy_apis")
         self.http: HttpClient = self.server.lookup_component("http_client")
@@ -318,11 +325,18 @@ class K1osStream:
             desc = ", ".join(f"{k} {show(k, after[k])}" for k in changed)
             logging.info(f"k1os_stream: settings changed: {desc}")
             await self.console(f"Twitch: set {desc}")
-        if self.active and any(k in PIPELINE_KEYS for k in changed):
+        encoder = self._service_state(self.encoder_service) == "active" \
+            and any(k in ENCODER_KEYS for k in changed)
+        if self.active and (encoder or any(k in PIPELINE_KEYS for k in changed)):
             await self.console("Twitch: restarting the stream with the new settings")
             await self._service("stop")
+            if encoder:
+                await self._service("restart", self.encoder_service)
             await asyncio.sleep(1.5)
             await self._service("start")
+        elif encoder:
+            # The camera view in Mainsail shares the encoder: it reconnects.
+            await self._service("restart", self.encoder_service)
         if any(k in ("title_template", "idle_title", "channel") for k in changed):
             self.force_title = True
         return after
@@ -333,19 +347,23 @@ class K1osStream:
         return self.server.lookup_component("machine")
 
     def service_state(self) -> str:
+        return self._service_state(self.service)
+
+    def _service_state(self, service: str) -> str:
         provider = getattr(self._machine(), "sys_provider", None)
         if provider is None:
             return "unknown"
-        info = provider.get_available_services().get(self.service)
+        info = provider.get_available_services().get(service)
         return info["active_state"] if info else "unavailable"
 
-    async def _service(self, action: str) -> None:
+    async def _service(self, action: str, service: Optional[str] = None) -> None:
+        service = service or self.service
         machine = self._machine()
         provider = machine.sys_provider
-        if not provider.is_service_available(self.service):
+        if not provider.is_service_available(service):
             raise self.server.error(
-                f"service {self.service} is not known to Moonraker (moonraker.asvc)")
-        await machine.do_service_action(action, self.service)
+                f"service {service} is not known to Moonraker (moonraker.asvc)")
+        await machine.do_service_action(action, service)
 
     async def start(self) -> None:
         s = self.settings()
@@ -501,17 +519,29 @@ class K1osStream:
 
     # ----- status ---------------------------------------------------------
 
-    def read_stats(self) -> Dict[str, Any]:
+    @staticmethod
+    def _read_json(path: str) -> Dict[str, Any]:
         try:
-            with open(self.status_file) as f:
-                stats = json.load(f)
-            if not isinstance(stats, dict):
-                return {}
-            if "started" in stats:
-                stats["uptime_s"] = int(time.time() - float(stats["started"]))
-            return stats
+            with open(path) as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
             return {}
+
+    def read_stats(self) -> Dict[str, Any]:
+        stats = self._read_json(self.status_file)
+        if stats and "kbit" not in stats:
+            # Twitch reads go2rtc's shared encoder: the rate comes from the
+            # encoder, the start time stays Twitch's own.
+            enc = self._read_json(self.encoder_status_file)
+            enc.pop("started", None)
+            stats = {**enc, **stats}
+        if "started" in stats:
+            try:
+                stats["uptime_s"] = int(time.time() - float(stats["started"]))
+            except (TypeError, ValueError):
+                pass
+        return stats
 
     def channel_url(self) -> str:
         s = self.settings()

@@ -42,7 +42,25 @@ case "${TWITCH_OVERLAY:-1}" in
     2) OPTS="$OPTS --graph ${TWITCH_GRAPH_CORNER:-tr}" ;;
 esac
 
-if [ -e "/dev/shm/k1os::jpeg" ]; then
+READER_PID=/run/k1os/twitch-reader.pid
+rm -f "$READER_PID"
+INPUT="-use_wallclock_as_timestamps 1 -f h264 -framerate $FPS -i -"
+from_go2rtc=
+if systemctl -q is-active go2rtc.service; then
+    from_go2rtc=1
+    # go2rtc runs the one encoder (/usr/libexec/k1os/h264-source, with the
+    # settings from twitch.env) for this stream and Mainsail's WebRTC player
+    # alike; read it as fragmented MP4. A stop ends wget, never the encoder,
+    # which may still have other viewers. The encoder reports its rate to
+    # /run/k1os/stream-status.json; this file only says when Twitch started.
+    echo "{\"started\": $(date +%s)}" > "$STATUS"
+    INPUT="-thread_queue_size 64 -f mov -i -"
+    run_stream() {
+        /usr/bin/wget -q -O - "http://127.0.0.1:1984/go2rtc/api/stream.mp4?src=k1" &
+        echo $! > "$READER_PID"
+        wait $!
+    }
+elif [ -e "/dev/shm/k1os::jpeg" ]; then
     # uStreamer runs: take its frames, the camera stays shared with Mainsail
     if [ -n "$TWITCH_RESOLUTION" ] && [ "$TWITCH_RESOLUTION" != "${CAMERA_RESOLUTION:-1280x720}" ]; then
         echo "k1os-twitch: uStreamer runs, the stream has the camera's ${CAMERA_RESOLUTION:-1280x720}, not TWITCH_RESOLUTION=$TWITCH_RESOLUTION" >&2
@@ -62,7 +80,7 @@ fi
 # way none of ffmpeg's messages (which name the output URL) contain it, and
 # the output below reaches the journal as it is written.
 run_stream | /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin \
-    -use_wallclock_as_timestamps 1 -f h264 -framerate "$FPS" -i - \
+    $INPUT \
     -f lavfi -i "anullsrc=r=44100:cl=mono" \
     -map 0:v -map 1:a -c:v copy -c:a aac -b:a 32k -ar 44100 -ac 1 \
     -shortest -flvflags no_duration_filesize \
@@ -83,15 +101,23 @@ stopping=
 on_stop() {
     trap "" TERM INT
     stopping=1
-    kill -TERM $(pidof k1os-stream ustreamer-dump) 2>/dev/null
+    # Reading from go2rtc, the encoder is not ours: end only the reader.
+    if [ -n "$from_go2rtc" ]; then
+        [ -s "$READER_PID" ] && kill -TERM $(cat "$READER_PID") 2>/dev/null
+    else
+        kill -TERM $(pidof k1os-stream ustreamer-dump) 2>/dev/null
+    fi
     n=0
     while [ $n -lt 40 ] && kill -0 $pipe 2>/dev/null; do sleep 0.1; n=$((n + 1)); done
     kill -0 $pipe 2>/dev/null && kill -TERM $pipe
-    kill -KILL $(pidof ustreamer-dump) 2>/dev/null
+    [ -z "$from_go2rtc" ] && kill -KILL $(pidof ustreamer-dump) 2>/dev/null
 }
 trap on_stop TERM INT
 wait $pipe
 rc=$?
-rm -f "$STATUS"
+rm -f "$STATUS" "$READER_PID"
 [ -n "$stopping" ] && exit 0
+# The video ended without a stop (go2rtc restarted, the encoder died): fail,
+# so that systemd starts the stream again (Restart=on-failure).
+[ "$rc" -eq 0 ] && rc=1
 exit $rc

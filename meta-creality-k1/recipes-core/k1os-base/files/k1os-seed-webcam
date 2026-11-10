@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Register the K1 camera in Moonraker once, so Mainsail shows it without setup.
 A webcam stored in Moonraker's database stays editable in the UI, unlike one
-defined in moonraker.conf."""
-import json, sys, time, urllib.request
+defined in moonraker.conf. Each step runs once, marked by its own file, so a
+camera the user deleted or changed later stays that way; a step added in a
+newer release still runs once on a printer that has the older ones."""
+import json, os, sys, time, urllib.request
 
 BASE = "http://127.0.0.1:7125"
 MARKER = "/usr/data/k1os/webcam-seeded"
+MARKER_WEBRTC = "/usr/data/k1os/webcam-seeded-webrtc"
 CAM = {
     "name": "K1", "location": "printer", "enabled": True,
     "service": "mjpegstreamer",
@@ -13,11 +16,16 @@ CAM = {
     "target_fps": 8, "target_fps_idle": 2, "aspect_ratio": "16:9",
     "rotation": 0, "flip_horizontal": False, "flip_vertical": False,
 }
-# Embedded web views (OrcaSlicer's Device tab, WebKit) cannot show the MJPEG
-# stream in an <img>; a second entry in snapshot-polling mode works there and
-# is picked per client in Mainsail's camera dropdown.
+# A snapshot-polling entry, picked per client in Mainsail's camera dropdown.
+# It was the way around WebKit (OrcaSlicer's Device tab) failing to fetch() the
+# MJPEG stream; mainsail.nginx now relabels the stream for that, so it is only
+# a fallback for slow links.
 CAMS = [CAM, dict(CAM, name="K1 (snapshots)", service="mjpegstreamer-adaptive",
                   target_fps=5, target_fps_idle=1)]
+# H.264 over WebRTC from go2rtc (the Helix encoder Twitch uses too): about a
+# third of the MJPEG bandwidth. Mainsail turns the URL into /go2rtc/api/ws.
+WEBRTC = dict(CAM, name="K1 (WebRTC)", service="webrtc-go2rtc",
+              stream_url="/go2rtc/stream.html?src=k1")
 
 def req(path, payload=None):
     data = json.dumps(payload).encode() if payload is not None else None
@@ -26,30 +34,53 @@ def req(path, payload=None):
     with urllib.request.urlopen(r, timeout=8) as resp:
         return json.load(resp)["result"]
 
-try:
-    open(MARKER).close(); sys.exit(0)
-except FileNotFoundError:
-    pass
+def add_cams(cams):
+    have = {w.get("name") for w in req("/server/webcams/list")["webcams"]}
+    for cam in cams:
+        if cam["name"] not in have:
+            req("/server/webcams/item", cam)
+            print("k1os-seed-webcam: registered camera '%s' in Moonraker" % cam["name"])
+
+def seed_first():
+    add_cams(CAMS)
+    # Mainsail shows the printer's name in its title bar; set it once, the UI keeps it editable.
+    try:
+        if req("/server/database/item?namespace=mainsail&key=general").get("value") is None:
+            raise KeyError
+    except Exception:
+        try:
+            req("/server/database/item", {"namespace": "mainsail", "key": "general", "value": {"printername": "Datel"}})
+            print("k1os-seed-webcam: named the printer 'Datel' in Mainsail")
+        except Exception as e:
+            print("k1os-seed-webcam: could not set the Mainsail printer name: %s" % e, file=sys.stderr)
+
+def seed_webrtc():
+    add_cams([WEBRTC])
+    # With several cameras Mainsail shows all of them at once unless one is
+    # picked; the pick is shared by all clients (Moonraker's database). Make
+    # the WebRTC camera the one, so a browser does not pull MJPEG beside it.
+    for page in ("dashboard", "page"):
+        req("/server/database/item", {"namespace": "mainsail",
+                                      "key": "view.webcam.currentCam." + page,
+                                      "value": WEBRTC["name"]})
+    print("k1os-seed-webcam: made '%s' Mainsail's camera" % WEBRTC["name"])
+
+STEPS = [(MARKER, seed_first), (MARKER_WEBRTC, seed_webrtc)]
+todo = [(m, f) for m, f in STEPS if not os.path.exists(m)]
 for _ in range(60):
     try:
-        have = {w.get("name") for w in req("/server/webcams/list")["webcams"]}
-        for cam in CAMS:
-            if cam["name"] not in have:
-                req("/server/webcams/item", cam)
-                print("k1os-seed-webcam: registered camera '%s' in Moonraker" % cam["name"])
+        req("/server/webcams/list")
         break
     except Exception as e:
         err = e; time.sleep(5)
 else:
     print("k1os-seed-webcam: Moonraker not reachable: %s" % err, file=sys.stderr); sys.exit(1)
-# Mainsail shows the printer's name in its title bar; set it once, the UI keeps it editable.
-try:
-    if req("/server/database/item?namespace=mainsail&key=general").get("value") is None:
-        raise KeyError
-except Exception:
+rc = 0
+for marker, step in todo:
     try:
-        req("/server/database/item", {"namespace": "mainsail", "key": "general", "value": {"printername": "Datel"}})
-        print("k1os-seed-webcam: named the printer 'Datel' in Mainsail")
+        step()
+        open(marker, "w").close()
     except Exception as e:
-        print("k1os-seed-webcam: could not set the Mainsail printer name: %s" % e, file=sys.stderr)
-open(MARKER, "w").close()
+        print("k1os-seed-webcam: %s failed: %s" % (step.__name__, e), file=sys.stderr)
+        rc = 1
+sys.exit(rc)
