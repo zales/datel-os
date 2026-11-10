@@ -68,16 +68,15 @@ While the stream runs, the channel title is set from Klipper's state in this sha
 | `TWITCH_FPS` | camera's `CAMERA_FPS` | Stream frame rate |
 | `TWITCH_AUTOSTART` | `0` | Start the stream at every boot |
 | `TWITCH_CLIENT_ID` | | Client ID for the title API |
-| `TWITCH_CHANNEL` | login from `TWITCH_LOGIN` | Channel name, used for the player webcam |
-| `TWITCH_PARENT` | `<hostname>,<hostname>.local` | Host names allowed to embed the player |
+| `TWITCH_CHANNEL` | login from `TWITCH_LOGIN` | Channel name, shown in the dialog |
 | `TWITCH_TITLE_TEMPLATE` | see above | Jinja template; placeholders `file`, `progress`, `elapsed`, `hotend`, `bed`, `hotend_temp`, `hotend_target`, `bed_temp`, `bed_target`, `state`, `state_emoji`, `layer`, `total_layers`, `channel`, `message` |
 | `TWITCH_IDLE_TITLE` | unchanged | Title set when the stream stops |
 | `TWITCH_CATEGORY` | `Makers & Crafting` | Category set at stream start; empty leaves it |
 | `TWITCH_M117` | `1` | Status line on the printer display |
 
-## Player in Mainsail
+## Watching the stream
 
-With a channel known, a Mainsail webcam `Twitch` of type iframe points at the Twitch player. Twitch embeds its player only into HTTPS pages from the hosts listed in `TWITCH_PARENT`; with Mainsail on plain HTTP or opened by IP address the browser blocks the frame and the webcam stays black. Until Mainsail is served over HTTPS under one of those names, watch the stream at `https://www.twitch.tv/<channel>`.
+The dialog shows the address, `twitch.tv/<channel>`; open it in a browser. Mainsail's own webcam panel keeps showing the camera directly from uStreamer, without the overlay and without the stream's delay. There is deliberately no Twitch player inside Mainsail: Twitch embeds its player only into HTTPS pages served under a registered host name, and Mainsail on the printer is plain HTTP by IP address. A webcam `Twitch` left over from an earlier release is removed at the next Moonraker start.
 
 ## Requirements and limits
 

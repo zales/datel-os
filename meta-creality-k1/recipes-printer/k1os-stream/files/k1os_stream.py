@@ -55,7 +55,7 @@ SETTING_KEYS = {
     "overlay": "TWITCH_OVERLAY", "ingest": "TWITCH_INGEST",
     "channel": "TWITCH_CHANNEL", "client_id": "TWITCH_CLIENT_ID",
     "title_template": "TWITCH_TITLE_TEMPLATE", "idle_title": "TWITCH_IDLE_TITLE",
-    "category": "TWITCH_CATEGORY", "parent": "TWITCH_PARENT",
+    "category": "TWITCH_CATEGORY",
     "m117": "TWITCH_M117", "autostart": "TWITCH_AUTOSTART",
 }
 PIPELINE_KEYS = ("resolution", "bitrate_kbps", "overlay", "ingest")
@@ -197,7 +197,7 @@ class K1osStream:
         self.login_task: Optional[asyncio.Task] = None
         self.auth: Dict[str, Any] = self._load_auth()
         self.auth_warned = False
-        self.webcam_seeded = False
+        self.webcam_cleaned = False
         self.dialog_shown_at = 0.0
         self.lock = asyncio.Lock()
 
@@ -252,7 +252,6 @@ class K1osStream:
             "title_template": env.get("TWITCH_TITLE_TEMPLATE") or DEFAULT_TEMPLATE,
             "idle_title": env.get("TWITCH_IDLE_TITLE", ""),
             "category": env.get("TWITCH_CATEGORY", "Makers & Crafting"),
-            "parent": env.get("TWITCH_PARENT", ""),
             "m117": _truthy(env.get("TWITCH_M117", "1")),
             "autostart": _truthy(env.get("TWITCH_AUTOSTART", "0")),
         }
@@ -298,10 +297,6 @@ class K1osStream:
                     raise ValueError("client_id looks wrong")
             elif key == "category":
                 val = str(val).strip()[:100]
-            elif key == "parent":
-                val = ",".join(p.strip() for p in str(val).split(",") if p.strip())
-                if not re.fullmatch(r"[A-Za-z0-9.,-]*", val):
-                    raise ValueError("parent must be a comma-separated list of host names")
             else:
                 val = str(val)[:400]
             out[SETTING_KEYS[key]] = val
@@ -328,8 +323,6 @@ class K1osStream:
             await self._service("stop")
             await asyncio.sleep(1.5)
             await self._service("start")
-        if any(k in ("channel", "parent") for k in changed):
-            self.webcam_seeded = False
         if any(k in ("title_template", "idle_title", "channel") for k in changed):
             self.force_title = True
         return after
@@ -520,17 +513,11 @@ class K1osStream:
         except (OSError, ValueError):
             return {}
 
-    def player_url(self) -> str:
+    def channel_url(self) -> str:
         s = self.settings()
         if not s["channel"]:
             return ""
-        parents = [p for p in s["parent"].split(",") if p]
-        if not parents:
-            host = self.server.get_host_info().get("hostname") or "localhost"
-            parents = [host, f"{host}.local"]
-        q = "&".join(["channel=" + urllib.parse.quote(s["channel"])] +
-                     ["parent=" + urllib.parse.quote(p) for p in parents])
-        return f"https://player.twitch.tv/?{q}&muted=true"
+        return "https://www.twitch.tv/" + urllib.parse.quote(s["channel"])
 
     def status(self) -> Dict[str, Any]:
         s = self.settings()
@@ -553,7 +540,7 @@ class K1osStream:
                 "category": self.auth.get("game_name", ""),
                 "login_pending": bool(self.login_task and not self.login_task.done()),
             },
-            "player_url": self.player_url(),
+            "channel_url": self.channel_url(),
         }
 
     def status_line(self) -> str:
@@ -658,9 +645,9 @@ class K1osStream:
 
     async def _tick(self) -> None:
         await self._poll_service()
-        if not self.webcam_seeded:
-            self.webcam_seeded = True
-            await self._seed_webcam()
+        if not self.webcam_cleaned:
+            self.webcam_cleaned = True
+            await self._remove_webcam()
         now = time.time()
         if self.active:
             due = self.force_title or now - self.last_title_at >= self.title_interval
@@ -977,32 +964,23 @@ class K1osStream:
 
     # ----- Mainsail webcam ------------------------------------------------
 
-    async def _seed_webcam(self) -> None:
-        url = self.player_url()
-        if not url:
-            return
+    async def _remove_webcam(self) -> None:
+        """Earlier releases added a Mainsail webcam "Twitch" with the Twitch
+        player in an iframe. Twitch embeds its player only into HTTPS pages
+        from a listed host name, which Mainsail on the printer is not, so the
+        frame stayed black; the webcam is removed on the first tick."""
         try:
             wcmgr = self.server.lookup_component("webcam")
-            cams = wcmgr.get_webcams()
-            cam = next((c for c in cams.values()
-                        if c.extra_data.get("k1os") == "twitch" or c.name == "Twitch"), None)
-            if cam is None:
-                from .webcam import WebCam
-                cam = WebCam(
-                    self.server, name="Twitch", enabled=True, icon="mdiWebcam",
-                    aspect_ratio="16:9", target_fps=15, target_fps_idle=5,
-                    location="printer", service="iframe", stream_url=url,
-                    snapshot_url="", flip_horizontal=False, flip_vertical=False,
-                    rotation=0, source="database", extra_data={"k1os": "twitch"},
-                    uid=wcmgr._get_guaranteed_uuid())
-                await wcmgr._save_cam(cam)
-                logging.info("k1os_stream: added the Twitch player as webcam 'Twitch'")
-            elif cam.extra_data.get("k1os") == "twitch" and cam.stream_url != url:
-                cam.stream_url = url
-                await wcmgr._save_cam(cam)
-                logging.info("k1os_stream: updated the Twitch player webcam URL")
+            cams = [c for c in wcmgr.get_webcams().values()
+                    if c.extra_data.get("k1os") == "twitch"]
+            for cam in cams:
+                await wcmgr._delete_cam(cam)
+                logging.info("k1os_stream: removed the Twitch player webcam '%s'", cam.name)
+            if cams:
+                self.server.send_event("webcam:webcams_changed",
+                                       {"webcams": wcmgr._list_webcams()})
         except Exception:
-            logging.exception("k1os_stream: webcam seed failed")
+            logging.exception("k1os_stream: webcam cleanup failed")
 
 
 def load_component(config: ConfigHelper) -> K1osStream:
