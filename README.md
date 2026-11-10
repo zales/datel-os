@@ -95,7 +95,7 @@ Our code, recipes, scripts, documentation and artwork are under the MIT license 
 | Component | License | Source |
 |---|---|---|
 | Linux 6.6 (Ingenic X2000, NebulaOS) | GPL-2.0 | [NebulaOS-KE/NebulaOS-kernel](https://github.com/NebulaOS-KE/NebulaOS-kernel) |
-| Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware) |
+| Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [zales/k1-kalico-firmware](https://github.com/zales/k1-kalico-firmware) (a fork of pellcorp/k1-kalico-firmware) |
 | Moonraker, Mainsail, moonraker-timelapse | GPL-3.0 | upstream |
 | uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
 | go2rtc 1.9.15 (built from source, one patch: a byte limit on the queue for a slow viewer) | MIT | [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) |

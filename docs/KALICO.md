@@ -7,7 +7,7 @@ Datel OS prints with Kalico and loads open firmware into all three MCUs; Crealit
 | Part | Source | Notes |
 |---|---|---|
 | Host | [pellcorp/kalico](https://github.com/pellcorp/kalico), branch `aug2026` | Kalico with the K1 additions: strain gauge probe (`load_cell_probe`, `hx711s`), MCU bootloader entry |
-| MCU firmware | [pellcorp/k1-kalico-firmware](https://github.com/pellcorp/k1-kalico-firmware), branch `aug2026` | Creality's GD32 port, built with the `gcc-arm-none-eabi` toolchain from meta-arm, with the header the Creality bootloader expects |
+| MCU firmware | [zales/k1-kalico-firmware](https://github.com/zales/k1-kalico-firmware), branch `fix/gd32-port-cleanup`: pellcorp's `aug2026` plus five commits | Creality's GD32 port, built with the `gcc-arm-none-eabi` toolchain from meta-arm, with the header the Creality bootloader expects. The fork puts the scheduler back to upstream (a timer that is already late shuts the MCU down; Creality's port moved it 2 µs ahead and carried on), drops the port's debug counters and links with GCC 13 |
 | Flashing | `k1os-mcu-update` (own) | Talks to the Creality serial bootloader on all three ports at once right after boot, writes a firmware only when the version differs, then starts the application |
 | Configuration | `k1os-kalico-config` (own) | Converts the stock `printer.cfg` once on the first start, backup next to it as `config.creality-<date>` |
 
