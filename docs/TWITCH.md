@@ -41,6 +41,8 @@ Note on `480p`: with uStreamer running, which is the normal case, the stream has
 
 `TWITCH_OVERLAY=1` draws the status bar at the bottom. `TWITCH_OVERLAY=2` adds a 320×128 graph panel in a corner (`TWITCH_GRAPH_CORNER=tl|tr|bl|br`, default top right): nozzle (red) and bed (blue) temperature over the last 20 minutes with the targets dashed, a legend with the current values, and a green progress bar with the percentage and the remaining time (`25m left`, `Paused`, `100% Done`; `Idle`, `Cancelled` or `Error` while nothing prints). The history is filled from Moonraker's temperature store at start, so the graph is only empty right after a reboot.
 
+Next to the graph (under it, or above it in a bottom corner) a second panel of the same size shows what the graph does not: chamber and mainboard temperature, the speed of the head and the volumetric flow (for 1.75 mm filament), the height and the part fan, the printer's CPU load and memory in use, the Wi-Fi signal and the bitrate the stream leaves with. A value turns orange when it is worth a look: the board from 70 °C, CPU from 90 %, memory from 85 %, Wi-Fi from -80 dBm down.
+
 Lines are thick and digits large on purpose: NV12 chroma has a quarter of the luma resolution and a 2.5 Mbit/s stream smears thin detail.
 
 ## The title

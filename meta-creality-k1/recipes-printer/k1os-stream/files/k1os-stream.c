@@ -29,6 +29,7 @@
 #include "jpeg_dht.h"
 #include "moonraker.h"
 #include "overlay.h"
+#include "sysstat.h"
 
 #define NBUFS 2
 #define CAM_BUFS 3
@@ -560,6 +561,8 @@ static void usage(void)
 	        "  --font small|large    overlay font 12x24 or 16x32 (large)\n"
 	        "  --no-overlay          leave the picture alone\n"
 	        "  --graph tl|tr|bl|br   add the graph panel (temperatures, progress) in that corner\n"
+	        "                        and the statistics panel (chamber, board, speed, flow, Z,\n"
+	        "                        fan, CPU, RAM, Wi-Fi, bitrate) next to it\n"
 	        "  --moonraker HOST:PORT (127.0.0.1:7125)\n"
 	        "  --device /dev/videoN  the Helix codec (found by its name helix-venc)\n"
 	        "  --stats SECONDS       print statistics on stderr every N s (5, 0 = off)\n"
@@ -591,7 +594,9 @@ int main(int argc, char **argv)
 	struct jpeg_src src;
 	struct helix_m2m dec, enc;
 	struct overlay ov;
-	struct graph *gr = NULL;
+	struct graph *gr = NULL, *sp = NULL;   /* graph panel, statistics panel */
+	struct sys_stats sys;
+	double last_kbit = 0;
 	static struct temp_history hist;
 	struct printer_state pstate;
 	int64_t period, next_tick, last_lines = 0, last_stats;
@@ -748,7 +753,17 @@ int main(int argc, char **argv)
 			gr = NULL;
 			graph_on = 0;
 		}
+		if (gr) {
+			sp = calloc(1, sizeof *sp);
+			if (!sp || graph_init_beside(sp, gr, height, overlay_bar_height(&ov)) < 0) {
+				fprintf(stderr, "k1os-stream: no room for the statistics panel in %ux%u, left out\n", width, height);
+				free(sp);
+				sp = NULL;
+			}
+		}
 	}
+	memset(&sys, 0, sizeof sys);
+	sys.cpu_pct = -1;
 	write_status(status_file, started, width, height, 0, 0, qp, 0, 0, 0, 0, 0, 1);
 
 	ring_n = gop_frames;
@@ -858,11 +873,18 @@ int main(int argc, char **argv)
 					moonraker_history_get(&hist);
 					graph_render(gr, &pstate, &hist);
 				}
+				if (sp) {
+					sysstat_sample(&sys);
+					stats_render(sp, &pstate, &sys, last_kbit);
+				}
 				last_lines = t1;
 			}
 			overlay_draw(&ov, dec.cap[last_nv12].map[0], dec.cap[last_nv12].map[1]);
 			if (gr) {
 				graph_blit(gr, last_nv12, fresh, dec.cap[last_nv12].map[0], dec.cap[last_nv12].map[1]);
+			}
+			if (sp) {
+				graph_blit(sp, last_nv12, fresh, dec.cap[last_nv12].map[0], dec.cap[last_nv12].map[1]);
 			}
 		}
 
@@ -932,6 +954,7 @@ int main(int argc, char **argv)
 
 		if (stats_s > 0 && t2 - last_stats >= (int64_t)stats_s * 1000000000LL) {
 			double secs = (t2 - last_stats) / 1e9;
+			last_kbit = bits_stats / secs / 1000.0;
 			fprintf(stderr, "k1os-stream: %.1f fps out, %.0f kbit/s, qp %d, camera %lu frames, "
 			        "%lu repeats, decode %.1f ms, encode %.1f ms%s\n",
 			        frames_stats / secs, bits_stats / secs / 1000.0, qp, src.received, repeats,
