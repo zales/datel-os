@@ -9,8 +9,8 @@ HOMEPAGE = "https://github.com/zales/k1-kalico-firmware"
 LICENSE = "GPL-3.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=1ebbd3e34237af26da5dc08a4e440464"
 
-# pellcorp/k1-kalico-firmware, branch aug2026, plus thirteen commits (see the fork's log).
-SRC_URI = "git://github.com/zales/k1-kalico-firmware.git;protocol=https;branch=fix/gd32-port-cleanup"
+# The fork's main: pellcorp/k1-kalico-firmware, branch aug2026, plus thirteen commits.
+SRC_URI = "git://github.com/zales/k1-kalico-firmware.git;protocol=https;branch=main"
 SRCREV = "d071d0a8d5ff47fbdc6f0913a5804523c0306485"
 PV = "aug2026+git${SRCPV}"
 S = "${WORKDIR}/git"
