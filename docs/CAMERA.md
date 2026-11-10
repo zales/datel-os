@@ -15,7 +15,7 @@ and restart with `systemctl restart ustreamer`. Keep the frame rate in Mainsail'
 
 ### OrcaSlicer
 
-OrcaSlicer's device tab is an embedded WebKit browser that cannot show an MJPEG stream in an image; Mainsail reports "Error while connecting to …/webcam/?action=stream". Moonraker therefore has a second camera **K1 (snapshots)** in adaptive snapshot mode (5 fps). Pick it from the camera dropdown of the webcam panel in OrcaSlicer; Mainsail remembers the choice per browser, so a normal browser keeps the full stream.
+OrcaSlicer's device tab on macOS is an embedded WebKit browser. WebKit fails a `fetch()` of a `multipart/x-mixed-replace` body ("Load failed"), and Mainsail's MJPEG player reads the stream with `fetch()`, so it reported "Error while connecting to …/webcam/?action=stream". nginx now labels the same bytes `multipart/mixed` for that request (Mainsail's worker sends `Accept: */*` and `?timestamp=`); an `<img>` or a browser tab still gets `multipart/x-mixed-replace`. Both cameras, **K1** and **K1 (snapshots)**, work there.
 
 ## Timelapse
 

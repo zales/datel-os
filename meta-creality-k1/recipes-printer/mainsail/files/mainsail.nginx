@@ -4,6 +4,18 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# WebKit (Safari, OrcaSlicer's Device tab on macOS) fails a fetch() of a
+# multipart/x-mixed-replace body with "Load failed", and Mainsail's MJPEG
+# worker reads the stream with fetch(). The worker splits frames itself, so its
+# request (a plain "Accept: */*" plus the ?timestamp= it appends) gets the same
+# bytes labelled multipart/mixed; an <img>, a browser tab or any other client
+# still gets multipart/x-mixed-replace. Sec-Fetch-Dest would be the cleaner
+# test, but browsers send it only to HTTPS and localhost, not to the printer.
+map "$http_accept|$arg_timestamp|$upstream_http_content_type" $webcam_content_type {
+    "~^\*/\*\|\d+\|multipart/x-mixed-replace(?<ct_params>.*)$" "multipart/mixed$ct_params";
+    default $upstream_http_content_type;
+}
+
 upstream apiserver {
     ip_hash;
     server 127.0.0.1:7125;
@@ -62,6 +74,8 @@ server {
         postpone_output 0;
         proxy_buffering off;
         proxy_ignore_headers X-Accel-Buffering;
+        proxy_hide_header Content-Type;
+        add_header Content-Type $webcam_content_type always;
         access_log off;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
