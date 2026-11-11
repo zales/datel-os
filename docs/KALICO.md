@@ -6,8 +6,8 @@ Datel OS prints with Kalico and loads open firmware into all three MCUs; Crealit
 
 | Part | Source | Notes |
 |---|---|---|
-| Host | [pellcorp/kalico](https://github.com/pellcorp/kalico), branch `aug2026` | Kalico with the K1 additions: strain gauge probe (`load_cell_probe`, `hx711s`), MCU bootloader entry |
-| MCU firmware | [zales/k1-kalico-firmware](https://github.com/zales/k1-kalico-firmware), branch `main`: pellcorp's `aug2026` plus thirteen commits | Creality's GD32 port, built with the `gcc-arm-none-eabi` toolchain from meta-arm, with the header the Creality bootloader expects. The fork puts the scheduler back to upstream (a timer that is already late shuts the MCU down; Creality's port moved it 2 µs ahead and carried on), drops the port's debug counters and links with GCC 13 |
+| Host | [pellcorp/kalico](https://github.com/pellcorp/kalico), branch `nov2026` | Kalico with the K1 additions: strain gauge probe (`load_cell_probe`, `hx711s`), MCU bootloader entry |
+| MCU firmware | [zales/k1-kalico-firmware](https://github.com/zales/k1-kalico-firmware), branch `feat/nov2026`: pellcorp's `nov2026` plus twelve commits | Creality's GD32 port, built with the `gcc-arm-none-eabi` toolchain from meta-arm, with the header the Creality bootloader expects. The fork puts the scheduler back to upstream (a timer that is already late shuts the MCU down; Creality's port moved it 2 µs ahead and carried on), drops the port's debug counters and links with GCC 13 |
 | Flashing | `k1os-mcu-update` (own) | Talks to the Creality serial bootloader on all three ports at once right after boot, writes a firmware only when the version differs, then starts the application |
 | Configuration | `k1os-kalico-config` (own) | Converts the stock `printer.cfg` once on the first start, backup next to it as `config.creality-<date>` |
 
@@ -21,6 +21,7 @@ Firmware updates happen only on a cold start: the bootloader waits about 15 s af
 - Switches the Z endstop to `probe:z_virtual_endstop`.
 - Includes `k1os_kalico.cfg` with the probe, the mesh, replacements for Creality's commands (`CX_PRINT_LEVELING_CALIBRATION`, `CX_PRINT_DRAW_ONE_LINE`, `PRTOUCH_READY`, …), the timelapse macros and the Twitch macros.
 - Seeds the `SAVE_CONFIG` block with values measured on one K1 unless stock already has them: `[load_cell_probe]` counts_per_gram 116.7 and tare, `[input_shaper]` X ei 42.2 Hz, Y mzv 53.2 Hz. The printer homes and meshes right after flashing; your own calibration is recommended.
+- On every start, rewrites a load cell tare saved as one number into one value per strain gauge, which Kalico `nov2026` requires (`reference_tare_counts has 1 values, expected 4` otherwise). The sum is divided evenly, so the total stays the same; `LOAD_CELL_CALIBRATE` replaces the shares with measured ones. The file from before the change is kept as `printer.cfg.single-tare`. An image with the older Kalico cannot read the new form: before switching back to one, copy that file over `printer.cfg`.
 
 ## Calibration
 

@@ -6,14 +6,14 @@ HOMEPAGE = "https://github.com/pellcorp/kalico"
 LICENSE = "GPL-3.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=1ebbd3e34237af26da5dc08a4e440464"
 
-SRC_URI = "git://github.com/pellcorp/kalico.git;protocol=https;branch=aug2026 \
+SRC_URI = "git://github.com/pellcorp/kalico.git;protocol=https;branch=nov2026 \
            file://klipper.service \
            file://klipper-mcu.service \
            file://k1os_kalico.cfg \
            file://k1os-kalico-config \
            file://k1os-kalico-config.service"
-SRCREV = "e8150318ec6174766c317b1a2c00ee4b0a651d11"
-PV = "aug2026+git${SRCPV}"
+SRCREV = "7095e20918e5290c6aa754dbc9d6513c8959db14"
+PV = "nov2026+git${SRCPV}"
 S = "${WORKDIR}/git"
 
 inherit python3native systemd
@@ -52,7 +52,7 @@ do_install() {
     find ${D}${KLIPPER_DIR} -name '*.o' -delete
     python3 -m compileall -q -j 0 -s ${D} -p / ${D}${KLIPPER_DIR}/klippy || true
     # Without a git checkout Klipper reads its version from .version
-    echo "kalico-aug2026-g${@d.getVar('SRCREV')[:8]}" > ${D}${KLIPPER_DIR}/klippy/.version
+    echo "kalico-nov2026-g${@d.getVar('SRCREV')[:8]}" > ${D}${KLIPPER_DIR}/klippy/.version
 
     install -d ${D}${bindir}
     install -m 0755 ${S}/out/klipper.elf ${D}${bindir}/klipper_mcu

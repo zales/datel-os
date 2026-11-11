@@ -4,6 +4,9 @@
 Runs once (marker file). The stock printer.cfg, gcode_macro.cfg and
 sensorless.cfg are edited in place after a backup; k1os_kalico.cfg is
 included for the load cell probe, bed mesh and shims.
+
+Every start it also brings the saved load cell tare up to the form the
+installed Kalico reads (one value per strain gauge).
 """
 import os, re, shutil, sys
 
@@ -29,9 +32,13 @@ SEED_SAVE_CONFIG = {
     # HX711 + Creality strain gauges: counts per gram varies a few percent
     # between printers (it only scales the trigger force), the tare just sets
     # the gram readout; the probe tares itself before every measurement.
+    # The tare is one value per gauge, in the order of dout_pins.
     "load_cell_probe": (("counts_per_gram", "116.71463"),
-                        ("reference_tare_counts", "1688742")),
+                        ("reference_tare_counts",
+                         "422186, 422186, 422185, 422185")),
 }
+# Strain gauges under the K1 bed (dout_pins in k1os_kalico.cfg)
+LOAD_CELL_CHANNELS = 4
 
 
 def sections(text):
@@ -114,8 +121,45 @@ def sub_file(path, pairs):
     open(path, "w").write(s)
 
 
+def split_tare(path):
+    """Rewrite a saved tare that is one sum into one value per gauge.
+
+    Kalico used to save the sum of all gauges and now refuses to start unless
+    it finds a value for each. Only the sum was ever stored, so it is divided
+    evenly: the total, which the gram readout and the drift check use, stays
+    exact, and LOAD_CELL_CALIBRATE replaces the shares with measured ones.
+    """
+    if not os.path.exists(path):
+        return
+    text = open(path).read()
+    done = []
+
+    def split(m):
+        total = int(m.group(2))
+        share, rest = divmod(total, LOAD_CELL_CHANNELS)
+        parts = [share + (i < rest) for i in range(LOAD_CELL_CHANNELS)]
+        done.append(total)
+        return m.group(1) + ", ".join("%d" % v for v in parts)
+
+    new = re.sub(r"^(#\*# \[load_cell_probe\]\n(?:#\*# (?!\[).*\n)*?"
+                 r"#\*# reference_tare_counts = )(-?\d+)[ \t]*$",
+                 split, text, flags=re.M)
+    if not done:
+        return
+    shutil.copy(path, path + ".single-tare")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(new)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    print("k1os-kalico-config: load cell tare %d split over %d gauges, "
+          "previous file in %s.single-tare" % (done[0], LOAD_CELL_CHANNELS, path))
+
+
 def main():
     if os.path.exists(MARK):
+        split_tare(os.path.join(CFG, "printer.cfg"))
         return 0
     if not os.path.exists(os.path.join(CFG, "printer.cfg")):
         print("k1os-kalico-config: no printer.cfg yet", file=sys.stderr)
