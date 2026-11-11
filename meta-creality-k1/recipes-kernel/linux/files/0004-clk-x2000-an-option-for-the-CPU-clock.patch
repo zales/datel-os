@@ -1,0 +1,138 @@
+From: Datel OS
+Subject: clk: x2000: an option for the CPU clock
+
+The boot loaders run the X2000 at 1200 MHz. On the Creality K1 floating
+point arithmetic is not reliable at that speed: a program that repeats a
+fixed double calculation and compares the results bit for bit gets a wrong
+one a few times in a million rounds on one CPU, and about once in a
+thousand rounds with both CPUs busy; more when the board is warm. Integer
+tests pass. At 750 and 912 MHz the same kernel and the same binary gave no
+wrong result in more than a million rounds on a warm board. The kernel's
+FPU context code is not involved: a kernel without MSA behaves the same,
+and so does one that uses the FPU on a single CPU.
+
+Klipper computes step times in floating point. A wrong result shows up as
+a step before the previous one ("stepcompress ... Invalid sequence") and
+the printer shuts down in the middle of a print.
+
+CONFIG_CLK_X2000_CPU_MHZ reprograms the APLL before the clocks are
+registered. The APLL feeds only the CPU and the L2 cache; the buses run
+from the MPLL. The CPU waits on MPLL / 2 while the APLL relocks. If the
+registers are not as the boot loaders leave them, nothing is changed.
+
+--- a/module_drivers/drivers/clk/ingenic-v2/Kconfig
++++ b/module_drivers/drivers/clk/ingenic-v2/Kconfig
+@@ -18,6 +18,24 @@
+ 	help
+ 	  build the ingenic x2000 soc clock driver.
+ 
++config CLK_X2000_CPU_MHZ
++	int "x2000 CPU clock in MHz (0: as the boot loader left it)"
++	depends on CLK_X2000
++	range 0 1200
++	default 0
++	help
++	  Reprograms the APLL, which feeds only the CPU and its L2 cache, to
++	  this frequency before the clocks are registered. It must be a
++	  multiple of 24 from 600 to 1200.
++
++	  The boot loaders run the X2000 at 1200 MHz. At that speed the
++	  Creality K1 computes wrong floating point results now and then
++	  (a few in a million repetitions of a fixed calculation on one CPU,
++	  a few in a thousand with both CPUs busy), more when the board is
++	  warm; the same kernel and the same program give none at 750 or
++	  912 MHz. Klipper turns such a result into a step that lies before
++	  the previous one and shuts the printer down.
++
+ config CLK_X2100
+ 	bool "clk x2100"
+ 	depends on SOC_X2100
+--- a/module_drivers/drivers/clk/ingenic-v2/clk-x2000.c
++++ b/module_drivers/drivers/clk/ingenic-v2/clk-x2000.c
+@@ -306,7 +306,76 @@
+ };
+ 
+ unsigned int x2000_nr_clk_reg_sleep = ARRAY_SIZE(x2000_clk_reg_sleep);
++
++#if CONFIG_CLK_X2000_CPU_MHZ
++static void __init x2000_cpccr_write(void __iomem *base, u32 val, bool dividers)
++{
++	int i;
++
++	/* bit 22: take over the CPU and L2 cache dividers; CPCSR bit 0: busy */
++	writel(dividers ? val | BIT(22) : val, base + CPM_CPCCR);
++	for (i = 0; dividers && i < 1000000 && (readl(base + CPM_CPCSR) & 1); i++)
++		;
++	writel(val, base + CPM_CPCCR);
++}
++
++/*
++ * Runs the CPU from the APLL at CONFIG_CLK_X2000_CPU_MHZ. The CPU waits on
++ * MPLL / 2 while the APLL relocks. Nothing is touched unless the registers
++ * are as the boot loaders leave them: the CPU on the undivided APLL, the
++ * buses on the MPLL, the APLL at 24 MHz times its feedback divider.
++ */
++static void __init x2000_set_cpu_clock(void __iomem *base)
++{
++	const u32 mhz = CONFIG_CLK_X2000_CPU_MHZ;
++	u32 cpccr = readl(base + CPM_CPCCR);
++	u32 apll = readl(base + CPM_CPAPCR), mpll = readl(base + CPM_CPMPCR);
++	/* reference divider - 1 in bits 19:14, output divider code in 13:11 */
++	u32 mpll_mhz = 24 * 2 * (((mpll >> 20) & 0x1ff) + 1) /
++		((((mpll >> 14) & 0x3f) + 1) * (1 << ((mpll >> 11) & 7)));
++	int i;
++
++	if (mhz == 24 * (((apll >> 20) & 0x1ff) + 1))
++		return;
++	if (mhz % 24 || mhz < 600 || mhz > 1200 ||
++	    (cpccr & 0xff) != 0x10 ||		/* CPU / 1, L2 cache / 2 */
++	    ((cpccr >> 28) & 3) != 1 ||		/* CPU from the APLL */
++	    ((cpccr >> 26) & 3) == 1 || ((cpccr >> 24) & 3) == 1 ||	/* buses */
++	    ((apll >> 14) & 0x3f) != 0 || ((apll >> 11) & 7) != 1 ||
++	    mpll_mhz < 1200 || mpll_mhz > 2400) {
++		pr_warn("x2000: CPU clock left alone (wanted %u MHz, CPCCR %08x, CPAPCR %08x, CPMPCR %08x)\n",
++			mhz, cpccr, apll, mpll);
++		return;
++	}
+ 
++	/* to MPLL / 2: the dividers first, then the source */
++	cpccr = (cpccr & ~0xffu) | 0x31;
++	x2000_cpccr_write(base, cpccr, true);
++	cpccr = (cpccr & ~(3u << 28)) | 2u << 28;
++	x2000_cpccr_write(base, cpccr, false);
++
++	/* the APLL: off, the new feedback divider, wait for the lock (bit 3) */
++	apll = (apll & ~(0x1ffu << 20)) | (mhz / 24 - 1) << 20 | 1;
++	writel(0, base + CPM_CPAPCR);
++	writel(apll, base + CPM_CPAPCR);
++	for (i = 0; i < 10000000 && !(readl(base + CPM_CPAPCR) & BIT(3)); i++)
++		;
++	if (!(readl(base + CPM_CPAPCR) & BIT(3))) {
++		pr_err("x2000: the APLL did not lock at %u MHz, the CPU stays on MPLL / 2\n", mhz);
++		return;
++	}
++
++	/* back to the APLL: the source first, then the dividers */
++	cpccr = (cpccr & ~(3u << 28)) | 1u << 28;
++	x2000_cpccr_write(base, cpccr, false);
++	cpccr = (cpccr & ~0xffu) | 0x10;
++	x2000_cpccr_write(base, cpccr, true);
++	pr_info("x2000: CPU clock set to %u MHz\n", mhz);
++}
++#else
++static inline void x2000_set_cpu_clock(void __iomem *base) { }
++#endif
++
+ /* Register x2000 clocks. */
+ static void __init x2000_clk_init(struct device_node *np)
+ {
+@@ -331,6 +400,9 @@
+ 	ingenic_clk_of_register_fixed_ext(ctx, x2000_fixed_rate_ext_clks,
+ 	                                  ARRAY_SIZE(x2000_fixed_rate_ext_clks), ext_clk_match);
+ 
++	/* Before the clocks read their rates from the registers */
++	x2000_set_cpu_clock(reg_base);
++
+ 	/* Register PLLs. */
+ 	ingenic_clk_register_pll(ctx, x2000_pll_clks,
+ 	                         ARRAY_SIZE(x2000_pll_clks), reg_base);

@@ -16,6 +16,7 @@ SRC_URI = "git://github.com/NebulaOS-KE/NebulaOS-kernel.git;protocol=https;branc
            file://0001-helix-rc-none.patch \
            file://0002-helix-no-MAX-MIN-redefinition.patch \
            file://0003-helix-rc-none-frame-setup.patch \
+           file://0004-clk-x2000-an-option-for-the-CPU-clock.patch \
           "
 SRCREV = "d86790d2e23178e52054c71562f9c40994a5469b"
 S = "${WORKDIR}/git/kernel/kernel-6.6"
