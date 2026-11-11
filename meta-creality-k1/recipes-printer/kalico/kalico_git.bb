@@ -11,7 +11,8 @@ SRC_URI = "git://github.com/pellcorp/kalico.git;protocol=https;branch=nov2026 \
            file://klipper-mcu.service \
            file://k1os_kalico.cfg \
            file://k1os-kalico-config \
-           file://k1os-kalico-config.service"
+           file://k1os-kalico-config.service \
+           file://0001-plan-4-s-and-send-steps-3-s-ahead.patch"
 SRCREV = "7095e20918e5290c6aa754dbc9d6513c8959db14"
 PV = "nov2026+git${SRCPV}"
 S = "${WORKDIR}/git"

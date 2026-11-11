@@ -1,0 +1,43 @@
+From: Datel OS
+Subject: toolhead, motion_queuing: plan 4 s and send steps 3 s ahead
+
+The background flush keeps steps only 0.45 to 0.70 s ahead of the MCU's
+clock while stepping, and wakes up 0.45 s before they run out. On the K1
+the host is slow (two MIPS CPUs shared with the camera and Moonraker), and
+stalls of Klipper's main thread of 0.6 s and more were seen during prints:
+the MCU ran out of steps and shut down with "Timer too close".
+
+Keep steps 3.00 to 3.25 s ahead instead, and plan 4 s of moves instead of
+2 so that there are moves to make those steps from. A stall of up to about
+three seconds is then harmless. The cost: a pause, a cancel or a change of
+the speed factor takes effect about two seconds later than before
+(M112 is not queued and stops at once, as before).
+
+--- a/klippy/toolhead.py
++++ b/klippy/toolhead.py
+@@ -238,7 +238,7 @@
+         return self.junction_flush <= 0.0
+ 
+ 
+-BUFFER_TIME_HIGH = 2.0
++BUFFER_TIME_HIGH = 4.0
+ BUFFER_TIME_START = 0.250
+ 
+ 
+--- a/klippy/extras/motion_queuing.py
++++ b/klippy/extras/motion_queuing.py
+@@ -9,10 +9,10 @@
+ 
+ from .danger_options import get_danger_options
+ 
+-BGFLUSH_LOW_TIME = 0.200
+-BGFLUSH_HIGH_TIME = 0.400
+-BGFLUSH_SG_LOW_TIME = 0.450
+-BGFLUSH_SG_HIGH_TIME = 0.700
++BGFLUSH_LOW_TIME = 2.750
++BGFLUSH_HIGH_TIME = 2.950
++BGFLUSH_SG_LOW_TIME = 3.000
++BGFLUSH_SG_HIGH_TIME = 3.250
+ BGFLUSH_EXTRA_TIME = 0.250
+ 
+ MOVE_HISTORY_EXPIRE = 30.0
