@@ -1,0 +1,17 @@
+[Unit]
+Description=Datel OS: flight recorder (who had the CPUs before Klipper stopped)
+After=usr-data.mount
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/k1os-trace
+Restart=always
+RestartSec=5
+# The same priority as Klipper, so that its late wake-ups are the ones Klipper
+# would see.
+Nice=-10
+# Out of memory, it goes before the print.
+OOMScoreAdjust=400
+
+[Install]
+WantedBy=multi-user.target

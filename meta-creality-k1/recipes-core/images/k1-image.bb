@@ -29,6 +29,8 @@ IMAGE_INSTALL = " \
 IMAGE_INSTALL += "kalico moonraker mainsail guppyscreen nginx"
 # Camera: MJPEG and snapshots, H.264 over WebRTC, the Twitch stream; one daemon.
 IMAGE_INSTALL += "k1os-camera"
+# Flight recorder: what the system did in the minutes before Klipper stopped.
+IMAGE_INSTALL += "k1os-trace"
 # Timelapse: moonraker-timelapse with the render step on the X2000 Helix codec
 # (k1os-helix; k1os-camera's h264-to-mp4 writes the MP4 file).
 IMAGE_INSTALL += "moonraker-timelapse k1os-helix"
