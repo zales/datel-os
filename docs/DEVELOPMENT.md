@@ -53,7 +53,7 @@ The log is `build-last.log` in the volume. Images land in `build/tmp/deploy/imag
 
 **Read-only root.** Moonraker, Klipper and GuppyScreen expect writable trees. Moonraker's database, Klipper's configuration, timelapse files and all settings live under `/usr/data/k1os` (partition `mmcblk0p10`, shared by both slots); `k1os-datadir-setup` creates them on the first start and copies defaults once. `/usr/data/k1os/printer_data/config` holds `printer.cfg` and `moonraker.conf`.
 
-**Moonraker as root with `systemd_cli`.** Datel OS has no PolKit. Moonraker's service control runs `sudo systemctl`, so `sudo` is in the image; a static unit that was never started is not offered by Moonraker, hence the ordering reference from `k1os-twitch-autostart.service`.
+**Moonraker as root with `systemd_cli`.** Datel OS has no PolKit. Moonraker's service control runs `sudo systemctl`, so `sudo` is in the image; a static unit that was never started is not offered by Moonraker, hence the ordering reference from `k1os-twitch-autostart.service`. The provider starts `systemctl show` to learn the service states; upstream does that every two seconds, which was a fifth of a CPU here, so a patch makes it every ten and once more right after a service action.
 
 ## Pitfalls known up front
 

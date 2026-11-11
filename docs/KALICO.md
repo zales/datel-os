@@ -48,11 +48,13 @@ Write the result into the `SAVE_CONFIG` block.
 | `fan0` | Part cooling (nozzle board) |
 | `fan1` | Chamber fan with the filter (rear) |
 | `fan2` | Auxiliary side fan |
+| mainboard fan | Pin PB2 of the main MCU, in `[multi_pin heater_fans]` together with the hotend fan: it runs while the nozzle is above 40 °C |
 
 `M106 P<n>` maps 1:1, so OrcaSlicer's auxiliary fan `P2` is right; the exhaust `P3` is routed to `fan1`. The `output_pin` sliders in Mainsail send raw PWM: `fan1` spins from about 50/255, `fan2` from about 180/255.
 
 ## Known behaviour
 
+- Steps go out three seconds ahead. Kalico `nov2026` generates steps only 0.45 to 0.70 s ahead of the MCU's clock; a stall of its main thread longer than that ends the print with `MCU shutdown: Timer too close`, and on the K1's two slow CPUs stalls of 0.6 to 2.1 s were recorded. Datel OS patches it to plan 4 s of moves and send steps 3.00 to 3.25 s ahead. A pause, a cancel or a change of the speed factor therefore takes effect about two seconds later than on stock Kalico; `M112` stops at once.
 - After a warm restart from stock into Datel OS the main MCU stays in shutdown and Kalico reports "Can not update MCU 'mcu' config as it is shutdown". One `FIRMWARE_RESTART` fixes it. It does not happen on a normal start or between two Datel OS slots.
 - Going back to stock: stock reflashes its own MCU firmware on the next cold start.
 - Licensing: Kalico and the firmware are GPL-3.0. The pellcorp/creality repository (installer, configuration fragments, `mcu_util.py`) has no license, so nothing is taken from it; the flasher and the configuration conversion are Datel OS's own.

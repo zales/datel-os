@@ -61,6 +61,53 @@ load=2.16 1.58 1.20 mem_avail=76M swap=0M mem_psi=0.00 tmpfs=17M top=python3:37M
 
 To read only these lines: `journalctl -t k1os-health`, or `grep k1os-health` on the machine the journal is sent to.
 
+## The flight recorder
+
+`k1os-trace` answers "what was the system doing when the print died". Once a second it samples how late its own 10 ms wake-ups come, the CPU split, CPU time and run-queue wait of Klipper, the host MCU, Moonraker, the camera and nginx, Klipper's move buffer and stall count, and the Wi-Fi traffic. The last 900 s stay in memory. When `klippy.log` says "Transition to shutdown state", they are written to `/usr/data/k1os/trace/<time>/`:
+
+| File | Contents |
+|---|---|
+| `samples.txt` | one line a second, the column names in the second line |
+| `klippy-tail.log` | the end of `klippy.log` with Klipper's own dump |
+| `journal.txt` | the last ten minutes of the journal |
+| `top.txt` | the processes at that moment |
+
+`kill -USR1 $(pidof k1os-trace)` writes a recording at any time. A second in which a wake-up came more than 50 ms late or Klipper waited more than 200 ms for a CPU is also noted in the journal (`journalctl -t k1os-trace`).
+
+Two things to know when reading it. `klippy_wait` is the sum over all of Klipper's threads in that second, not one stall. And `buffer_s` is Klipper's planning buffer of moves, not the steps already at the MCU: those go out 3 s ahead ([KALICO.md](KALICO.md#known-behaviour)).
+
+## CPU clock and floating point
+
+The stock boot loader runs the X2000 at 1200 MHz. At that speed the reference printer computes wrong floating point results now and then. Kalico turns one into a step that lies before the previous one and shuts down in the middle of a print:
+
+```
+stepcompress o=3 i=-19732 c=1 a=0: Invalid sequence
+Internal error in stepcompress
+```
+
+`tools/fptest/fptest.c` repeats a fixed double calculation in several threads and compares every result bit for bit with the first; `tools/fptest/cpuclk.c` changes the clock on a running system. Four threads on both CPUs with the bed at 60 °C, 11 November 2026:
+
+| CPU clock | Wrong results |
+|---|---|
+| 1200 MHz | about 83 rounds a minute (1 in 1000) |
+| 1008 MHz | 7 in 3 minutes |
+| 912 MHz | none in 25 minutes (1.28 million rounds) |
+| 750 MHz | none, and a print of 127 minutes without a step error |
+
+The kernel therefore reprograms the PLL at boot (`CONFIG_CLK_X2000_CPU_MHZ=816`, one 96 MHz step below the highest clean frequency) and says so:
+
+```bash
+ssh root@<ip> 'dmesg | grep "CPU clock"'
+```
+
+What is known and what is not: integer tests pass at 1200 MHz; a kernel without MSA and a kernel that uses the FPU on one CPU only behave the same, so it is not the kernel's FPU context code; the errors are more frequent on a warm printer and right after a print. What exactly is marginal was not found, and neither was whether other K1s do the same: the stock firmware runs at 1200 MHz too and was not tested.
+
+To test a printer, build the tools with any MIPS cross compiler (`mipsel`, `-mips32r2 -mfp64 -mnan=2008 -static`, link `-lm -lpthread`) and run them for at least 25 minutes on a warm printer; a short run on a cold one gives zero at any clock and misleads:
+
+```bash
+./fptest 4 1500
+```
+
 ## Out of memory
 
 The printer has 216 MB of RAM for Linux. Three things keep a shortage from freezing it:

@@ -95,6 +95,16 @@ Stock Creality recorded its timelapse with the X2000's Helix block: its Klipper 
 - uStreamer: a snapshot request hung when nobody else was watching, 1 in 40 on an idle printer and 25 in 150 with both cores busy. The JPEG thread exposed the frame (waking the HTTP thread) before it counted the snapshot as processed. With the order swapped: 0 in 300.
 - `iw` reports `rx bitrate 1.0 MBit/s` and 69 000 failed transmissions on the bad evening; a 75 MB upload to the printer took 19 minutes until go2rtc was stopped, then under one. With the regulatory database in the kernel the domain is the country from `wpa_supplicant.conf` instead of the world default.
 
+## 11 November 2026: wrong floating point results at 1200 MHz
+
+- Three prints on Kalico `nov2026` ended after 18 to 33 minutes with `stepcompress ... Invalid sequence`: a step computed a few hundred microseconds before the previous one, on a different stepper each time. The flight recorder showed no overload at those moments.
+- A test that repeats a fixed double calculation gave wrong results in about 2.5 % of the rounds with two threads and none with one. The first reading, "floating point on two CPUs at once", led to a kernel that uses the FPU on CPU 0 only. It made the errors about 25 times rarer, not zero, and a print still died of one.
+- Further readings that measurements disproved one by one: the kernel's MSA handling (a kernel without MSA behaves the same), the mainboard temperature (errors continued at 32 °C with the board fan running), the bed heater switching, Klipper running next to the test, floating point emulation on the other CPU.
+- What held every time: the CPU clock. Same kernel, same binary, switched back and forth on a running system: errors at 1200 and 1008 MHz, none at 912 and 750. The numbers are in [DIAGNOSTICS.md](DIAGNOSTICS.md#cpu-clock-and-floating-point). The kernel now sets 816 MHz at boot; the FPU restriction was removed again.
+- Lesson: several conclusions that day came from tests of 15 to 30 seconds on a cold printer, which give zero at any clock. The error rate differs by a factor of sixty between a printer after a print and one with only the bed heated.
+- With less CPU, Klipper's stalls became the next failure: `Timer too close` after stalls of 0.6 to 2.1 s. Kalico sends steps only 0.45 s ahead; the 2 s it reports as its buffer is planned moves, not steps. Patched to 3 s, see [KALICO.md](KALICO.md#known-behaviour).
+- Load that was found on the way and removed: Moonraker's `systemctl show` every two seconds (14 to 17 % of a CPU in systemd), `k1os-bootlog` writing the whole journal every minute (3.4 MB after six hours), a camera viewer on a weak link asking for 93 000 packets again.
+
 ## Phases
 
 0. **Rescue:** eMMC backup and USB mask-ROM boot. Backup done; USB boot described, not verified on S12.

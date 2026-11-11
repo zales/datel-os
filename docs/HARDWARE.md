@@ -6,7 +6,7 @@ Found on 5 November 2026 on the printer at 192.168.1.104 over SSH. The sources a
 
 | Item | Value |
 |---|---|
-| SoC | Ingenic X2000: 2× XBurst2 (MIPS32r2 + MSA) and an XBurst0 core for the RTOS |
+| SoC | Ingenic X2000: 2× XBurst2 (MIPS32r2 + MSA) and an XBurst0 core for the RTOS. The boot loader sets 1200 MHz (APLL; the buses run from the 1500 MHz MPLL); Datel OS lowers the CPU to 816 MHz, see [DIAGNOSTICS.md](DIAGNOSTICS.md#cpu-clock-and-floating-point). The datasheet describes XBurst2 as a core with two hardware threads; Linux sees two CPUs |
 | RAM | 256 MiB, Linux sees 214 MiB |
 | Storage | 8 GB eMMC on msc0, 8-bit, HS200 |
 | Stock kernel | 4.4.94 from Ingenic, Buildroot 2020.02.1 |
