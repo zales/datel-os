@@ -10,6 +10,7 @@ SRC_URI = "git://github.com/Arksine/moonraker.git;protocol=https;branch=master \
            file://moonraker.service \
            file://moonraker.conf \
            file://0001-file_manager-build-file-listings-off-the-event-loop.patch \
+           file://0002-machine-poll-service-states-every-10-s.patch \
           "
 SRCREV = "b559b9a81161f958a43c2f527b6ad96f73310d5d"
 PV = "0.11.0+git${SRCPV}"

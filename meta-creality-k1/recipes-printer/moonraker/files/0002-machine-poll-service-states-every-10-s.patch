@@ -1,0 +1,45 @@
+From: Datel OS
+Subject: machine: poll systemd for service states every 10 s, not every 2
+
+The systemd_cli provider starts "systemctl show" every other second to
+notice service state changes. On the K1 (two slow MIPS CPUs) that was 14 %
+of a CPU in systemd plus 7 % in systemctl, all the time, next to a print.
+
+Poll every ten seconds, and refresh the states right after a service
+action so that start, stop and restart from the UI show up at once.
+
+--- a/moonraker/components/machine.py
++++ b/moonraker/components/machine.py
+@@ -982,6 +982,10 @@
+         raw: bool = False
+     ) -> Dict[str, Any]:
+         return {}
++
++# The CLI provider asks systemd for the service states once in this many
++# proc_stats updates (one a second)
++SERVICE_POLL_SEQUENCES = 10
+ 
+ class SystemdCliProvider(BaseProvider):
+     async def initialize(self) -> None:
+@@ -1000,6 +1004,9 @@
+                                 service_name: str
+                                 ) -> None:
+         await self._exec_sudo_command(f"systemctl {action} {service_name}")
++        # Do not wait for the next poll to show the new state
++        if self.available_services:
++            await self._update_service_status(0, notify=True)
+ 
+     async def check_virt_status(self) -> Dict[str, Any]:
+         # Fallback virtualization check
+@@ -1060,8 +1067,9 @@
+                                      sequence: int,
+                                      notify: bool = True
+                                      ) -> None:
+-        if sequence % 2:
+-            # Update every other sequence
++        if sequence % SERVICE_POLL_SEQUENCES:
++            # Each poll starts "systemctl show", which costs a fifth of a
++            # CPU on a small board when done every two seconds
+             return
+         svcs = list(self.available_services.keys())
+         try:
