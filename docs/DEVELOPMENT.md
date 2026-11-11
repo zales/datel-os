@@ -25,9 +25,9 @@ The log is `build-last.log` in the volume. Images land in `build/tmp/deploy/imag
 | `recipes-core/k1os-base/` | Datel OS services: data directory setup, trial boot and slot confirmation, Wi-Fi MAC, camera and printer-name seeding, `k1os-slot` |
 | `recipes-core/images/k1-image.bb` | The image |
 | `recipes-core/datel-branding/` | Hostname, MOTD, prompt, Mainsail logo |
-| `recipes-printer/` | `kalico`, `k1-mcu-firmware`, `k1os-mcu-update`, `moonraker`, `mainsail`, `guppyscreen`, `ustreamer`, `moonraker-timelapse`, `k1os-helix`, `k1os-stream` |
+| `recipes-printer/` | `kalico`, `k1-mcu-firmware`, `k1os-mcu-update`, `moonraker`, `mainsail`, `guppyscreen`, `k1os-camera`, `moonraker-timelapse`, `k1os-helix`, `k1os-stream` |
 | `recipes-httpd/nginx/` | Mainsail and camera proxy configuration |
-| `recipes-multimedia/ffmpeg/` | ffmpeg trimmed to muxing, MIPS configure fixes |
+| `recipes-devtools/zig/` | The Zig compiler (official binary) that builds `k1os-camera` |
 | `recipes-bsp/k1-wifi-nvram/` | Wi-Fi module calibration file |
 | `recipes-devtools/gcc/` | gcc built for FP64 and NaN 2008 |
 | `recipes-python/`, `recipes-connectivity/` | Python dependencies of Moonraker, sshd on a read-only root |
@@ -49,7 +49,7 @@ The log is `build-last.log` in the volume. Images land in `build/tmp/deploy/imag
 
 **Helix video codec.** The X2000 has a hardware H.264/JPEG encoder and JPEG decoder (Helix, `/dev/video1`, V4L2 memory-to-memory) and an H.264 decoder (Felix, not built). The vendor driver in `module_drivers/` is enabled with `CONFIG_VIDEO_INGENIC_VCODEC` and `CONFIG_INGENIC_HELIX` and needs a 32 MiB `shared-dma-pool` (`creality_k1.dts`). Three patches in `recipes-kernel/linux/files/`: `0001` adds the rate-control choice `RC_NONE` (the vendor offers a prebuilt `librc.a` or a netlink server nobody has), `0002` fixes a `MAX`/`MIN` redefinition under `-Werror`, `0003` builds the per-frame slice header and descriptor under `RC_NONE` and takes the QP from the V4L2 controls `V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP` and `P_FRAME_QP`. Userspace: `k1os-helix-enc` (timelapse) and `k1os-stream` (Twitch) in `recipes-printer/`. Driver quirks: `S_FMT` on the capture queue resets the encoder parameters, so controls are set after it; the control framework skips unchanged values, so write them after every `S_FMT`; the JPEG decoder returns the picture size in `buf->reserved`.
 
-**Camera node sharing.** A UVC node streams to one process. uStreamer serves Mainsail and publishes every frame into the shared-memory sink `k1os::jpeg`; the Twitch streamer reads from there.
+**Camera node sharing.** A UVC node streams to one process. That process is `k1os-camera`, which hands each frame to everyone who wants it: MJPEG clients, snapshots and its H.264 encoder.
 
 **Read-only root.** Moonraker, Klipper and GuppyScreen expect writable trees. Moonraker's database, Klipper's configuration, timelapse files and all settings live under `/usr/data/k1os` (partition `mmcblk0p10`, shared by both slots); `k1os-datadir-setup` creates them on the first start and copies defaults once. `/usr/data/k1os/printer_data/config` holds `printer.cfg` and `moonraker.conf`.
 

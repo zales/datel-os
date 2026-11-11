@@ -67,6 +67,6 @@ The printer has 216 MB of RAM for Linux. Three things keep a shortage from freez
 
 - **Swap in zram**, half the size of the RAM (`k1os-zram-swap`). Data that is not in use is compressed in place instead of program code being dropped and read back from the xz-compressed root.
 - **The kernel kills a process instead of thrashing.** The multi-gen LRU's `min_ttl_ms` is 1000: when what was used in the last second cannot be kept in memory, the OOM killer runs.
-- **The print is the last to go.** `OOMScoreAdjust`: Twitch stream 700, go2rtc 600, a timelapse render 500, uStreamer 300, Moonraker -300, Klipper and its host MCU -900.
+- **The print is the last to go.** `OOMScoreAdjust`: Twitch stream 700, a timelapse render 500, the camera daemon 300, Moonraker -300, Klipper and its host MCU -900.
 
 Tested by a process that takes 8 MB a second: it was killed after 19 s, the printer answered every second in between and Klipper stayed ready.

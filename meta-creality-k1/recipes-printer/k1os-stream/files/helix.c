@@ -132,7 +132,14 @@ int helix_open(struct helix_m2m *m, const char *dev, const char *name,
 {
 	struct v4l2_capability cap;
 
+	unsigned i, p;
+
 	memset(m, 0, sizeof *m);
+	for (i = 0; i < HELIX_MAX_BUFS; i++) {
+		for (p = 0; p < HELIX_MAX_PLANES; p++) {
+			m->out[i].dmabuf[p] = m->cap[i].dmabuf[p] = -1;
+		}
+	}
 	m->name = name;
 	m->width = width;
 	m->height = height;
@@ -147,32 +154,36 @@ int helix_open(struct helix_m2m *m, const char *dev, const char *name,
 	if (xioctl(m->fd, VIDIOC_QUERYCAP, &cap) < 0 ||
 	    !(cap.device_caps & V4L2_CAP_VIDEO_M2M_MPLANE)) {
 		fprintf(stderr, "%s: %s is not a multi-planar M2M device\n", name, dev);
-		return -1;
+		goto fail;
 	}
 	/* The driver picks its codec from the formats: JPEG on OUTPUT = decoder,
 	 * H264 on CAPTURE = encoder. OUTPUT first, so that a JPEG decoder's
 	 * capture format is set after jpeg_decoder_init(). */
 	if (set_fmt(m, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, out_fourcc) < 0) {
-		return -1;
+		goto fail;
 	}
 	if (set_fmt(m, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, cap_fourcc) < 0) {
-		return -1;
+		goto fail;
 	}
 	if (setup_queue(m, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, m->out, &m->out_nbufs, nbufs, out_dmabuf, 0) < 0) {
 		if (!out_dmabuf) {
-			return -1;
+			goto fail;
 		}
 		fprintf(stderr, "%s: no DMABUF import, frames will be copied\n", name);
 		m->out_dmabuf = 0;
 		if (setup_queue(m, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, m->out, &m->out_nbufs, nbufs, 0, 0) < 0) {
-			return -1;
+			goto fail;
 		}
 	}
 	if (setup_queue(m, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, m->cap, &m->cap_nbufs, nbufs, 0,
 	                cap_fourcc == V4L2_PIX_FMT_NV12) < 0) {
-		return -1;
+		goto fail;
 	}
 	return 0;
+fail:
+	/* nothing stays open after a failure */
+	helix_close(m);
+	return -1;
 }
 
 static int free_queue(struct helix_m2m *m, enum v4l2_buf_type type)

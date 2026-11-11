@@ -16,14 +16,12 @@ map "$http_accept|$arg_timestamp|$upstream_http_content_type" $webcam_content_ty
     default $upstream_http_content_type;
 }
 
-# Viewer limits. Every camera viewer costs the two cores and the 2.4 GHz link:
-# a WebRTC viewer about 7 % of a core in go2rtc (SRTP in plain Go) and
-# 2.5 Mbit/s, an MJPEG viewer about 10 % and 6 Mbit/s. The zones count the open
-# WebRTC signalling WebSockets (Mainsail keeps its one open for as long as it
-# plays) and the open MJPEG streams; snapshots (?action=snapshot, the timelapse
+# Viewer limits. An MJPEG viewer costs the 2.4 GHz link about 6 Mbit/s, so only
+# two streams are let in at a time; snapshots (?action=snapshot, the timelapse
 # too) have an empty key and are not counted. A viewer over the limit gets 503
-# and Mainsail's players try again by themselves until a place is free.
-limit_conn_zone $server_name zone=webrtc_viewers:64k;
+# and Mainsail's player tries again by itself until a place is free. WebRTC
+# viewers (2.5 Mbit/s each) are counted by k1os-camera itself, which has four
+# places.
 map $arg_action $mjpeg_viewer_key {
     stream  $server_name;
     default "";
@@ -84,25 +82,10 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
-    # Camera as H.264 over WebRTC: go2rtc on 127.0.0.1:1984 (go2rtc.service).
-    # Mainsail's webrtc-go2rtc player only needs the signalling WebSocket; the
-    # video then goes over UDP/TCP 8555. Only the stream "k1": go2rtc builds a
-    # stream from any source URL in src=, an exec: one included.
-    location = /go2rtc/api/ws {
-        if ($arg_src != "k1") {
-            return 403;
-        }
-        limit_conn webrtc_viewers 2;
-        access_log off;
-        proxy_pass http://127.0.0.1:1984;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $http_host;
-        proxy_read_timeout 1d;
-    }
-
-    # Camera: uStreamer on 127.0.0.1:8080 (ustreamer.service)
+    # Camera: k1os-camera on 127.0.0.1:8080 (k1os-camera.service). MJPEG as
+    # ?action=stream, a picture as ?action=snapshot, and WebRTC signalling as
+    # POST /webcam/webrtc, where X-Real-IP tells it which of its addresses the
+    # viewer can reach.
     location /webcam/ {
         limit_conn mjpeg_viewers 2;
         postpone_output 0;

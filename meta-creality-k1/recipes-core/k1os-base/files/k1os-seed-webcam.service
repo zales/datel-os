@@ -5,6 +5,7 @@ After=usr-data.mount moonraker.service
 # Runs while any of its one-time steps has no marker yet.
 ConditionPathExists=|!/usr/data/k1os/webcam-seeded
 ConditionPathExists=|!/usr/data/k1os/webcam-seeded-webrtc
+ConditionPathExists=|!/usr/data/k1os/webcam-seeded-k1os-camera
 
 [Service]
 Type=oneshot

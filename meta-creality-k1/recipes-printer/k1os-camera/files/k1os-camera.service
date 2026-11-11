@@ -1,0 +1,18 @@
+[Unit]
+Description=Camera: MJPEG and snapshots, H.264 over WebRTC, the Twitch stream (k1os-camera on 127.0.0.1:8080)
+After=network.target
+
+[Service]
+Type=simple
+# HTTP only for nginx (/webcam/) and for this machine; the WebRTC media goes
+# straight to the viewers over UDP. The camera and the encoder run only while
+# someone watches.
+ExecStart=/usr/bin/k1os-camera 127.0.0.1:8080 helix:/usr/libexec/k1os/camera-options
+Restart=always
+RestartSec=5
+Nice=5
+# Out of memory, the camera goes before the print.
+OOMScoreAdjust=300
+
+[Install]
+WantedBy=multi-user.target

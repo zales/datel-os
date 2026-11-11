@@ -26,6 +26,7 @@
 
 #include "graph.h"
 #include "helix.h"
+#include "k1os-stream.h"
 #include "jpeg_dht.h"
 #include "moonraker.h"
 #include "overlay.h"
@@ -35,13 +36,25 @@
 #define CAM_BUFS 3
 #define CODEC_TIMEOUT_MS 3000
 
-static volatile sig_atomic_t stop_now;
+static volatile sig_atomic_t stop_now, key_wanted;
 
+void k1os_stream_stop(void)
+{
+	stop_now = 1;
+}
+
+void k1os_stream_key_picture(void)
+{
+	key_wanted = 1;
+}
+
+#ifndef K1OS_STREAM_LIBRARY
 static void on_signal(int sig)
 {
 	(void)sig;
 	stop_now = 1;
 }
+#endif
 
 static int64_t now_ns(void)
 {
@@ -131,6 +144,9 @@ struct jpeg_src {
 	size_t len, cap;
 	size_t frame_end;               /* end of the frame handed out */
 	unsigned long received;
+	/* frames from the caller of k1os_stream_run() */
+	const struct k1os_stream_hooks *hook;
+	int hook_held;
 };
 
 static int xioctl(int fd, unsigned long req, void *arg)
@@ -142,10 +158,10 @@ static int xioctl(int fd, unsigned long req, void *arg)
 	return r;
 }
 
-static int src_open_stdin(struct jpeg_src *s)
+static int src_open_stream(struct jpeg_src *s, int fd)
 {
 	memset(s, 0, sizeof *s);
-	s->fd = STDIN_FILENO;
+	s->fd = fd;
 	s->held = -1;
 	s->pending = -1;
 	s->cap = 2 * 1024 * 1024;
@@ -155,6 +171,15 @@ static int src_open_stdin(struct jpeg_src *s)
 	}
 	fcntl(s->fd, F_SETFL, fcntl(s->fd, F_GETFL) | O_NONBLOCK);
 	return 0;
+}
+
+static void src_open_hook(struct jpeg_src *s, const struct k1os_stream_hooks *hooks)
+{
+	memset(s, 0, sizeof *s);
+	s->fd = -1;     /* nothing to poll: the waits become plain sleeps */
+	s->held = -1;
+	s->pending = -1;
+	s->hook = hooks;
 }
 
 static int src_open_v4l2(struct jpeg_src *s, const char *dev, unsigned w, unsigned h, unsigned fps)
@@ -232,10 +257,42 @@ static int src_open_v4l2(struct jpeg_src *s, const char *dev, unsigned w, unsign
 	return 0;
 }
 
+static void src_release(struct jpeg_src *s);
+
+/* Undo src_open_stream() or src_open_v4l2(), also one that failed half way.
+ * The descriptor of a stream belongs to whoever passed it in. */
+static void src_close(struct jpeg_src *s)
+{
+	unsigned i;
+	src_release(s);
+	if (s->is_v4l2) {
+		enum v4l2_buf_type t = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		if (s->fd >= 0) {
+			xioctl(s->fd, VIDIOC_STREAMOFF, &t);
+		}
+		for (i = 0; i < CAM_BUFS; i++) {
+			if (s->cam[i].map && s->cam[i].map != MAP_FAILED) {
+				munmap(s->cam[i].map, s->cam[i].len);
+			}
+		}
+		if (s->fd >= 0) {
+			close(s->fd);
+		}
+	}
+	free(s->buf);
+	memset(s, 0, sizeof *s);
+	s->fd = -1;
+}
+
 /* Give a previously taken frame back. */
 static void src_release(struct jpeg_src *s)
 {
-	if (s->is_v4l2) {
+	if (s->hook) {
+		if (s->hook_held) {
+			s->hook->frame_done(s->hook->ctx);
+			s->hook_held = 0;
+		}
+	} else if (s->is_v4l2) {
 		if (s->held >= 0) {
 			struct v4l2_buffer b;
 			memset(&b, 0, sizeof b);
@@ -270,6 +327,9 @@ static void cam_requeue(struct jpeg_src *s, int idx)
  * buffer. Returns -1 at the end of the stream or on an error. */
 static int src_fill(struct jpeg_src *s)
 {
+	if (s->hook) {
+		return 0;
+	}
 	if (s->is_v4l2) {
 		for (;;) {
 			struct v4l2_buffer b;
@@ -318,6 +378,14 @@ static int src_fill(struct jpeg_src *s)
  * data and len set (valid until src_release), 0 if none. */
 static int src_take(struct jpeg_src *s, const uint8_t **data, size_t *len)
 {
+	if (s->hook) {
+		int r = s->hook->frame(s->hook->ctx, data, len);
+		if (r > 0) {
+			s->hook_held = 1;
+			s->received++;
+		}
+		return r;
+	}
 	if (s->is_v4l2) {
 		if (s->pending < 0) {
 			return 0;
@@ -372,6 +440,7 @@ static int src_take(struct jpeg_src *s, const uint8_t **data, size_t *len)
 /* ------------------------------------------------------------------ */
 /* Output                                                              */
 
+#ifndef K1OS_STREAM_LIBRARY
 static int write_all(int fd, const struct iovec *iov_in, int n)
 {
 	struct iovec iov[4];
@@ -407,6 +476,7 @@ static int write_all(int fd, const struct iovec *iov_in, int n)
 	}
 	return 0;
 }
+#endif
 
 /* The driver pads SPS/PPS in front of an IDR slice to 256 bytes with a
  * filler NAL (type 12); drop it, it is only noise for the muxer. */
@@ -570,7 +640,7 @@ static void usage(void)
 	        "  --frames N            stop after N frames\n");
 }
 
-int main(int argc, char **argv)
+int k1os_stream_run(int argc, char **argv, const struct k1os_stream_hooks *hooks)
 {
 	static const struct option opts[] = {
 		{"camera", 1, 0, 'c'}, {"size", 1, 0, 's'}, {"fps", 1, 0, 'f'}, {"bitrate", 1, 0, 'b'},
@@ -603,11 +673,18 @@ int main(int argc, char **argv)
 	unsigned last_nv12 = 0, have_frame = 0, dec_out = 0, enc_out = 0, enc_cap = 0;
 	unsigned long frames = 0, repeats = 0, decoded = 0;
 	uint64_t dec_ns = 0, enc_ns = 0;
-	uint64_t *ring;
 	uint64_t ring_sum = 0, bits_total = 0, bits_stats = 0;
 	unsigned ring_n, ring_i = 0, ring_fill = 0;
 	unsigned long frames_stats = 0;
-	int c, no_dht_warned = 0, eof = 0;
+	int c, no_dht_warned = 0, eof = 0, rc = 1, moonraker_on = 0;
+	uint64_t *ring = NULL;
+
+	stop_now = 0;
+	key_wanted = 0;
+	optind = 0;     /* getopt starts over: this may not be the first run */
+	memset(&src, 0, sizeof src);
+	src.fd = -1;
+	dec.fd = enc.fd = -1;
 
 	while ((c = getopt_long(argc, argv, "h", opts, NULL)) != -1) {
 		switch (c) {
@@ -662,24 +739,26 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	signal(SIGINT, on_signal);
-	signal(SIGTERM, on_signal);
-	signal(SIGPIPE, SIG_IGN);
-
-	if (!strcmp(camera, "-")) {
-		if (src_open_stdin(&src) < 0) {
-			return 1;
+	if (hooks->frame) {
+		src_open_hook(&src, hooks);
+	} else if (!strcmp(camera, "-")) {
+		if (src_open_stream(&src, hooks->jpeg_fd) < 0) {
+			goto out;
 		}
 	} else if (src_open_v4l2(&src, camera, cam_w, cam_h, fps) < 0) {
-		return 1;
+		goto out;
 	}
 
 	if (!overlay_on) {
 		graph_on = 0;
 	}
-	if (overlay_on && moonraker_start(mr_host, mr_port, graph_on) < 0) {
-		overlay_on = 0;
-		graph_on = 0;
+	if (overlay_on) {
+		if (moonraker_start(mr_host, mr_port, graph_on) < 0) {
+			overlay_on = 0;
+			graph_on = 0;
+		} else {
+			moonraker_on = 1;
+		}
 	}
 
 	/* The first frame tells the size. */
@@ -690,9 +769,12 @@ int main(int argc, char **argv)
 			struct pollfd p = { src.fd, POLLIN, 0 };
 			int r;
 			if (src_fill(&src) < 0) {
-				return 1;
+				goto out;
 			}
 			r = src_take(&src, &d, &l);
+			if (r < 0) {
+				goto out;
+			}
 			if (r > 0) {
 				if (jpeg_size(d, l, &width, &height) < 0) {
 					fprintf(stderr, "a camera frame is not a baseline JPEG\n");
@@ -702,26 +784,27 @@ int main(int argc, char **argv)
 				src_release(&src);
 				break;
 			}
-			poll(&p, 1, 1000);
+			poll(&p, 1, src.hook ? 20 : 1000);
 		}
 		if (stop_now) {
-			return 0;
+			rc = 0;
+			goto out;
 		}
 	}
 	if (width < 160 || height < 120 || (width & 15) || (height & 15)) {
 		fprintf(stderr, "camera frames are %ux%u; the Helix needs multiples of 16\n", width, height);
-		return 1;
+		goto out;
 	}
 	fprintf(stderr, "k1os-stream: %ux%u, %u fps, %u kbit/s, GOP %u frames, codec %s\n",
 	        width, height, fps, bitrate_kbit, gop_frames, device);
 
 	if (helix_open(&dec, device, "jpeg-decoder", V4L2_PIX_FMT_JPEG, V4L2_PIX_FMT_NV12,
 	               width, height, NBUFS, 0) < 0) {
-		return 1;
+		goto out;
 	}
 	if (helix_open(&enc, device, "h264-encoder", V4L2_PIX_FMT_NV12, V4L2_PIX_FMT_H264,
 	               width, height, NBUFS, 1) < 0) {
-		return 1;
+		goto out;
 	}
 	helix_set_ctrl(&enc, V4L2_CID_MPEG_VIDEO_H264_PROFILE, V4L2_MPEG_VIDEO_H264_PROFILE_MAIN);
 	helix_set_ctrl(&enc, V4L2_CID_MPEG_VIDEO_H264_LEVEL,
@@ -734,10 +817,10 @@ int main(int argc, char **argv)
 	helix_set_ctrl(&enc, V4L2_CID_MPEG_VIDEO_H264_I_FRAME_QP, qp > qp_min + 2 ? qp - 2 : qp_min);
 	helix_set_ctrl(&enc, V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP, qp);
 	if (helix_probe_dmabuf(&enc, &dec) < 0) {
-		return 1;
+		goto out;
 	}
 	if (helix_stream_on(&dec) < 0 || helix_stream_on(&enc) < 0) {
-		return 1;
+		goto out;
 	}
 	fprintf(stderr, "k1os-stream: frames pass from the decoder to the encoder %s\n",
 	        enc.out_dmabuf ? "as DMABUFs" : "by copy");
@@ -769,7 +852,7 @@ int main(int argc, char **argv)
 	ring_n = gop_frames;
 	ring = calloc(ring_n, sizeof *ring);
 	if (!ring) {
-		return 1;
+		goto out;
 	}
 
 	period = 1000000000LL / fps;
@@ -809,6 +892,9 @@ int main(int argc, char **argv)
 			break;
 		}
 		r = src_take(&src, &jpeg, &jlen);
+		if (r < 0) {
+			break;
+		}
 		if (r > 0) {
 			uint8_t *dst = dec.out[dec_out].map[0];
 			size_t cap = dec.out[dec_out].len[0];
@@ -888,7 +974,8 @@ int main(int argc, char **argv)
 			}
 		}
 
-		flags = (frames % gop_frames == 0) ? V4L2_BUF_FLAG_KEYFRAME : 0;
+		flags = (frames % gop_frames == 0 || key_wanted) ? V4L2_BUF_FLAG_KEYFRAME : 0;
+		key_wanted = 0;
 		if (enc.out_dmabuf) {
 			r = helix_queue_output_dmabuf(&enc, enc_out, &dec, last_nv12, flags);
 		} else {
@@ -909,8 +996,7 @@ int main(int argc, char **argv)
 		if (used > 0) {
 			struct iovec iov[2];
 			int n = split_out_filler(enc.cap[cap_i].map[0], used, iov);
-			if (write_all(STDOUT_FILENO, iov, n) < 0) {
-				fprintf(stderr, "stdout: %s\n", strerror(errno));
+			if (hooks->picture(hooks->ctx, iov, n) < 0) {
 				break;
 			}
 		}
@@ -980,7 +1066,77 @@ int main(int argc, char **argv)
 	if (status_file) {
 		unlink(status_file);
 	}
+	rc = (stop_now || (max_frames && frames >= max_frames)) ? 0 : 1;
+out:
 	helix_close(&enc);
 	helix_close(&dec);
-	return (stop_now || (max_frames && frames >= max_frames)) ? 0 : 1;
+	src_close(&src);
+	if (moonraker_on) {
+		moonraker_stop();
+	}
+	free(gr);
+	free(sp);
+	free(ring);
+	return rc;
 }
+
+struct k1os_camera {
+	struct jpeg_src src;
+};
+
+struct k1os_camera *k1os_camera_open(const char *dev, unsigned width, unsigned height, unsigned fps)
+{
+	struct k1os_camera *cam = calloc(1, sizeof *cam);
+	if (!cam) {
+		return NULL;
+	}
+	if (src_open_v4l2(&cam->src, dev, width, height, fps) < 0) {
+		src_close(&cam->src);
+		free(cam);
+		return NULL;
+	}
+	return cam;
+}
+
+int k1os_camera_fd(const struct k1os_camera *cam)
+{
+	return cam->src.fd;
+}
+
+int k1os_camera_frame(struct k1os_camera *cam, const uint8_t **data, size_t *len)
+{
+	src_release(&cam->src);
+	if (src_fill(&cam->src) < 0) {
+		return -1;
+	}
+	return src_take(&cam->src, data, len);
+}
+
+void k1os_camera_close(struct k1os_camera *cam)
+{
+	if (cam) {
+		src_close(&cam->src);
+		free(cam);
+	}
+}
+
+#ifndef K1OS_STREAM_LIBRARY
+static int to_stdout(void *ctx, const struct iovec *iov, int n)
+{
+	(void)ctx;
+	if (write_all(STDOUT_FILENO, iov, n) < 0) {
+		fprintf(stderr, "stdout: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	const struct k1os_stream_hooks hooks = { STDIN_FILENO, to_stdout, NULL, NULL, NULL };
+	signal(SIGINT, on_signal);
+	signal(SIGTERM, on_signal);
+	signal(SIGPIPE, SIG_IGN);
+	return k1os_stream_run(argc, argv, &hooks);
+}
+#endif

@@ -34,6 +34,8 @@ struct temp_history {
 /* Start a thread that queries http://host:port once a second. With history,
  * it first loads /server/temperature_store so the graph starts full. */
 int moonraker_start(const char *host, int port, int history);
+/* End that thread and wait for it; start may be called again afterwards. */
+void moonraker_stop(void);
 /* Copy the latest state (thread safe). */
 void moonraker_get(struct printer_state *out);
 /* Copy the history in chronological order (thread safe). */

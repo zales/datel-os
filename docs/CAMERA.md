@@ -2,7 +2,7 @@
 
 ## Camera
 
-The K1 camera is a USB UVC device (Sonix 0c45:6366) that produces MJPEG and H.264 in hardware. Datel OS serves the MJPEG with [uStreamer](https://github.com/pikvm/ustreamer) 6.67 without re-encoding; nginx exposes it at `http://<ip>/webcam/?action=stream` and `?action=snapshot`. The camera node is found automatically (the USB node with index 0), and the camera is registered in Moonraker once on the first boot, so Mainsail shows it without setup.
+The K1 camera is a USB UVC device (Sonix 0c45:6366) that produces MJPEG and H.264 in hardware. Datel OS serves it with one small daemon of its own, `k1os-camera` (`k1os-camera.service`, written in Zig): the MJPEG frames unchanged, snapshots, H.264 over WebRTC and the Twitch stream. nginx exposes it at `http://<ip>/webcam/?action=stream` and `?action=snapshot`. The camera node is found automatically (the USB node with index 0), and the camera is registered in Moonraker once on the first boot, so Mainsail shows it without setup. The camera is open only while something uses it, and for a minute after the last snapshot; the first snapshot after a pause takes almost two seconds, the following ones well under a tenth.
 
 Defaults: 1280×720 at 8 fps, about 6 Mbit/s. 15 fps is about 12 Mbit/s and stutters on a weak 2.4 GHz link. Change it in `/usr/data/k1os/camera.env`:
 
@@ -11,7 +11,7 @@ CAMERA_RESOLUTION=1280x720
 CAMERA_FPS=8
 ```
 
-and restart with `systemctl restart ustreamer`. Keep the frame rate in Mainsail's camera settings in step.
+The setting applies the next time the camera is opened; `systemctl restart k1os-camera` applies it at once. Keep the frame rate in Mainsail's camera settings in step.
 
 ### Cameras in Mainsail
 
@@ -19,17 +19,17 @@ Moonraker gets three cameras, all from the same camera:
 
 | Camera | Player | Bandwidth | Notes |
 |---|---|---|---|
-| **K1 (WebRTC)** | `webrtc-go2rtc` | about 2.5 Mbit/s | H.264 from the Helix codec through [go2rtc](https://github.com/AlexxIT/go2rtc), the same picture and encoder as the Twitch stream (overlay included). Mainsail's camera on first boot |
-| **K1** | `mjpegstreamer` | about 6 Mbit/s | The MJPEG stream from uStreamer, no re-encoding |
+| **K1 (WebRTC)** | `webrtc-camerastreamer` | about 2.5 Mbit/s | H.264 from the Helix codec, the same picture and encoder as the Twitch stream (overlay included). Mainsail's camera on first boot |
+| **K1** | `mjpegstreamer` | about 6 Mbit/s | The camera's own MJPEG frames, no re-encoding |
 | **K1 (snapshots)** | `mjpegstreamer-adaptive` | depends on the link | Snapshot polling at up to 5 fps, for slow links |
 
 Mainsail shows every camera at once until one is picked, and the pick is stored for all browsers; the first boot picks **K1 (WebRTC)**, an update from an older release does that once as well.
 
-go2rtc starts the encoder (`/usr/libexec/k1os/h264-source`: `ustreamer-dump | k1os-stream`) for the first viewer and stops it after the last one leaves, so the WebRTC camera costs nothing while nobody watches. The picture follows the Twitch settings in `/usr/data/k1os/twitch.env` (bitrate, frame rate, overlay); changing them in the TWITCH dialog restarts go2rtc, and an open WebRTC view reconnects. go2rtc's API listens on localhost only; nginx passes on `/go2rtc/api/ws?src=k1` and nothing else, and the video goes over UDP/TCP port 8555.
+`k1os-camera` starts the encoder (k1os-stream's pipeline, built into it: JPEG decode, overlay and H.264 on the Helix) for the first viewer and stops it after the last one leaves, so the WebRTC camera costs nothing while nobody watches. A viewer who joins gets a key picture at once and sees the picture in under half a second. The picture follows the Twitch settings in `/usr/data/k1os/twitch.env` (bitrate, frame rate, overlay); changing them in the TWITCH dialog restarts `k1os-camera`, and an open WebRTC view reconnects. Signalling is camera-streamer's protocol, `POST /webcam/webrtc`; the daemon is an ICE-lite agent and offers one UDP port per viewer on the address that viewer reached the printer by, so it works on the local network and over a VPN, not through NAT. Packets a viewer reports as lost are sent again. With one WebRTC viewer the daemon uses about 2 MB of memory and 8 % of one core, encoder included.
 
 ### Viewer limits
 
-nginx lets in two WebRTC viewers and two MJPEG streams at a time (`limit_conn` in `/etc/nginx/sites-enabled/mainsail`). A viewer costs the printer about 7 % of one core and 2.5 Mbit/s over WebRTC, about 10 % and 6 Mbit/s over MJPEG, measured during a print. One more viewer gets a 503; Mainsail's WebRTC player shows `disconnected` and tries again every 2 s until a place is free. Snapshots are not counted, so the timelapse and the **K1 (snapshots)** camera always work. The WebRTC limit counts the signalling WebSocket, which Mainsail holds open while it plays; it is a guard for the printer's resources, not an access control.
+`k1os-camera` has four places for WebRTC viewers, and nginx lets in two MJPEG streams at a time (`limit_conn` in `/etc/nginx/sites-enabled/mainsail`): an MJPEG stream is about 6 Mbit/s on the 2.4 GHz link, a WebRTC viewer 2.5 Mbit/s. One MJPEG viewer more gets a 503 and Mainsail's player tries again until a place is free. Snapshots are not counted, so the timelapse and the **K1 (snapshots)** camera always work. The limits guard the printer's resources; they are not an access control.
 
 ### OrcaSlicer
 
@@ -43,7 +43,7 @@ Timelapse uses [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-
 |---|---|
 | Moonraker component `[timelapse]` | Takes a snapshot per layer or per interval, offers the Timelapse panel in Mainsail. Frames go to `/usr/data/k1os/timelapse/frames/`, videos to `/usr/data/k1os/timelapse/` |
 | `k1os-helix-enc` | Decodes the JPEG frames (libjpeg-turbo, or the Helix with `-H`) and encodes them through `/dev/video1` into an H.264 stream |
-| `timelapse-render` | Stands in for ffmpeg in the component's configuration: runs the codec and lets ffmpeg wrap the stream into MP4 with `-c copy`. If the codec fails, the MJPEG frames go into the MP4 unchanged |
+| `timelapse-render` | Stands in for ffmpeg in the component's configuration (there is no ffmpeg on the printer): runs the codec and lets `h264-to-mp4` write the MP4 file around the stream. Rotating or flipping is not possible on this path |
 
 ### Use
 

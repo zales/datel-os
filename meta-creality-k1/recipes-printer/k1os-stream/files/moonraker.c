@@ -337,6 +337,10 @@ static void history_push(const struct printer_state *st)
 	}
 }
 
+static pthread_t poller_thread;
+static int poller_running;
+static volatile int poller_stop;
+
 static void *poller(void *arg)
 {
 	static char buf[16384];
@@ -348,7 +352,7 @@ static void *poller(void *arg)
 		prefill_history();
 	}
 	clock_gettime(CLOCK_MONOTONIC, &next);
-	for (;;) {
+	while (!poller_stop) {
 		if (http_get(QUERY, buf, sizeof buf) == 0) {
 			parse(buf, &st);
 		} else {
@@ -370,23 +374,40 @@ static void *poller(void *arg)
 
 int moonraker_start(const char *host, int port, int history)
 {
-	pthread_t t;
 	pthread_attr_t attr;
 	unsigned i;
+	moonraker_stop();
 	snprintf(mr_host, sizeof mr_host, "%s", host);
 	mr_port = port;
 	keep_history = history;
 	for (i = 0; i < HISTORY_N; i++) {
 		hist.nozzle[i] = hist.nozzle_target[i] = hist.bed[i] = hist.bed_target[i] = TEMP_NONE;
 	}
+	hist.n = 0;
+	hist_i = 0;
+	memset(&current, 0, sizeof current);
+	poller_stop = 0;
 	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	pthread_attr_setstacksize(&attr, 128 * 1024);
-	if (pthread_create(&t, &attr, poller, NULL) != 0) {
+	if (pthread_create(&poller_thread, &attr, poller, NULL) != 0) {
 		fprintf(stderr, "moonraker: cannot start the poller thread: %s\n", strerror(errno));
+		pthread_attr_destroy(&attr);
 		return -1;
 	}
+	pthread_attr_destroy(&attr);
+	poller_running = 1;
 	return 0;
+}
+
+void moonraker_stop(void)
+{
+	if (!poller_running) {
+		return;
+	}
+	/* the poller sleeps up to a second between its requests */
+	poller_stop = 1;
+	pthread_join(poller_thread, NULL);
+	poller_running = 0;
 }
 
 void moonraker_get(struct printer_state *out)

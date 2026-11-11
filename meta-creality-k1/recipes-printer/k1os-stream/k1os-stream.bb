@@ -1,20 +1,21 @@
 SUMMARY = "k1os-stream: camera stream with a status overlay through the X2000 Helix codec, the Twitch service and its Mainsail controls"
-DESCRIPTION = "k1os-stream takes the camera's MJPEG frames (from uStreamer's memory sink, so \
-Mainsail keeps its camera), decodes them on the Helix, draws the print status into the \
-picture and encodes H.264 on the Helix with a userspace rate controller on the QP \
-controls. k1os-twitch.service sends that through ffmpeg to Twitch over RTMP. The \
+DESCRIPTION = "k1os-stream takes the camera's MJPEG frames, decodes them on the Helix, draws \
+the print status into the picture and encodes H.264 on the Helix with a userspace rate \
+controller on the QP controls. k1os-camera has the same code built in and is what runs \
+on the printer; the command here is for trying the pipeline by hand. k1os-twitch.service \
+has k1os-camera send its picture to Twitch over RTMP. The \
 Moonraker component k1os_stream starts and stops it from Mainsail (TWITCH dialog, \
 macros, /server/k1os/stream) and keeps the Twitch stream title at the print state."
 LICENSE = "MIT & BSD-2-Clause"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302 \
                     file://LICENSE.spleen;md5=6b0faaab001f2e05d12e136feb82cf71"
 
-SRC_URI = "file://Makefile file://k1os-stream.c file://helix.c file://helix.h \
+SRC_URI = "file://Makefile file://k1os-stream.c file://k1os-stream.h file://helix.c file://helix.h \
            file://overlay.c file://overlay.h file://moonraker.c file://moonraker.h \
            file://graph.c file://graph.h file://sysstat.c file://sysstat.h \
            file://font12x24.h file://font16x32.h file://jpeg_dht.h file://bdf2c.py file://LICENSE.spleen \
            file://k1os-twitch file://k1os-twitch.service file://k1os-twitch-autostart.service \
-           file://k1os-twitch-asvc file://k1os-h264-source file://moonraker-k1os-twitch.conf file://twitch.env.example \
+           file://k1os-twitch-asvc file://moonraker-k1os-twitch.conf file://twitch.env.example \
            file://k1os_stream.py file://k1os_stream.cfg file://k1os-stream.conf"
 S = "${WORKDIR}"
 
@@ -30,8 +31,6 @@ do_install() {
     install -m 0755 ${S}/k1os-stream ${D}${bindir}/
     install -m 0755 ${S}/k1os-twitch ${D}${libexecdir}/k1os/twitch
     install -m 0755 ${S}/k1os-twitch-asvc ${D}${libexecdir}/k1os/twitch-asvc
-    # go2rtc's source for the stream "k1" (recipe go2rtc, /etc/go2rtc.yaml)
-    install -m 0755 ${S}/k1os-h264-source ${D}${libexecdir}/k1os/h264-source
     install -m 0644 ${S}/k1os-twitch.service ${S}/k1os-twitch-autostart.service ${D}${systemd_system_unitdir}/
     # Moonraker only controls services listed in moonraker.asvc: add ours before it starts.
     install -m 0644 ${S}/moonraker-k1os-twitch.conf ${D}${systemd_system_unitdir}/moonraker.service.d/k1os-twitch.conf
@@ -56,4 +55,4 @@ SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 FILES:${PN} += "${systemd_system_unitdir}/k1os-twitch.service"
 
 FILES:${PN} += "${libexecdir}/k1os ${systemd_system_unitdir} ${datadir}/k1os ${datadir}/moonraker"
-RDEPENDS:${PN} += "ffmpeg ustreamer moonraker python3-jinja2"
+RDEPENDS:${PN} += "k1os-camera moonraker python3-core python3-json python3-netclient python3-jinja2"

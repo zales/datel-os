@@ -85,7 +85,7 @@ if [ "$state" = ready ]; then
     vers=$(printf '%s' "$m" | grep -o '"mcu_version": *"[^"]*"' | sed 's/.*: *"//; s/"//; s/-.*//' | sort -u | tr '\n' ' ')
     [ -n "$vers" ] && row MCUs "${d}main, nozzle, bed:${n} ${b}${vers% }${n}"
 fi
-cam=$(systemctl is-active ustreamer 2>/dev/null)
+cam=$(systemctl is-active k1os-camera 2>/dev/null)
 [ "$cam" = active ] && row Camera "${g}● streaming${n} ${d}http://${ips%% *}/webcam/${n}"
 
 # --- Anything wrong -----------------------------------------------------

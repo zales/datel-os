@@ -64,4 +64,4 @@ RDEPENDS:${PN} += " \
 "
 # sudo: the systemd_cli provider of Moonraker's machine component runs every
 # service action as "sudo systemctl ..." even as root; without the binary
-# Mainsail's Services menu (k1os-twitch, ustreamer, ...) fails with HTTP 500.
+# Mainsail's Services menu (k1os-twitch, k1os-camera, ...) fails with HTTP 500.

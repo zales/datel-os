@@ -26,14 +26,15 @@ IMAGE_INSTALL = " \
 # Printing stack: Kalico (pellcorp's tree with the K1 load cell probe) with our
 # own firmware for the three MCUs, Moonraker, Mainsail on nginx and Guppy
 # Screen on the touch display.
-IMAGE_INSTALL += "kalico moonraker mainsail guppyscreen nginx ustreamer"
+IMAGE_INSTALL += "kalico moonraker mainsail guppyscreen nginx"
+# Camera: MJPEG and snapshots, H.264 over WebRTC, the Twitch stream; one daemon.
+IMAGE_INSTALL += "k1os-camera"
 # Timelapse: moonraker-timelapse with the render step on the X2000 Helix codec
-# (k1os-helix, pulls in ffmpeg for the MP4 muxing).
+# (k1os-helix; k1os-camera's h264-to-mp4 writes the MP4 file).
 IMAGE_INSTALL += "moonraker-timelapse k1os-helix"
-# Twitch live stream with a status overlay (k1os-stream on the Helix codec, ffmpeg for RTMP).
+# Twitch live stream with a status overlay: its service and Mainsail controls
+# (k1os-camera encodes and sends it).
 IMAGE_INSTALL += "k1os-stream"
-# The camera as H.264 over WebRTC in Mainsail, from the same encoder as Twitch.
-IMAGE_INSTALL += "go2rtc"
 
 IMAGE_ROOTFS_EXTRA_SPACE = "0"
 

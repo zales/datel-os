@@ -1,123 +1,112 @@
-#!/bin/sh
-# Live stream to Twitch: camera frames (from uStreamer's memory sink, so
-# Mainsail keeps its camera; straight from the camera when uStreamer is not
-# running), status overlay and H.264 by k1os-stream on the Helix codec,
-# FLV over RTMP by ffmpeg.
-#
-# Settings in /usr/data/k1os/twitch.env (mode 600, the stream key lives only
-# there):
-#   TWITCH_KEY=live_...                      required
-#   TWITCH_INGEST=rtmp://live.twitch.tv/app  optional, a closer ingest server
-#   TWITCH_BITRATE=2500                      optional, kbit/s
-#   TWITCH_FPS=                              optional, default: the camera's CAMERA_FPS
-#   TWITCH_RESOLUTION=1280x720               optional, capture size without uStreamer
-#   TWITCH_OVERLAY=1                         optional, 0 plain camera, 1 status bar,
-#                                            2 status bar and the graph panel
-#   TWITCH_GRAPH_CORNER=tr                   optional, corner of the panel: tl tr bl br
-# Mainsail's TWITCH dialog (Moonraker component k1os_stream) writes the
-# optional lines; k1os-stream reports its rate to /run/k1os/twitch-status.json.
-ENV=/usr/data/k1os/twitch.env
-if [ ! -r "$ENV" ]; then
-    echo "k1os-twitch: $ENV is missing. Create it on the printer with your stream key:" >&2
-    echo "  umask 077; echo TWITCH_KEY=live_xxxxxxxx > $ENV" >&2
-    exit 1
-fi
-TWITCH_KEY=; TWITCH_INGEST=; TWITCH_BITRATE=; TWITCH_FPS=; TWITCH_RESOLUTION=; TWITCH_OVERLAY=
-TWITCH_GRAPH_CORNER=
-. "$ENV"
-if [ -z "$TWITCH_KEY" ]; then
-    echo "k1os-twitch: TWITCH_KEY is empty in $ENV" >&2
-    exit 1
-fi
-[ -r /usr/data/k1os/camera.env ] && . /usr/data/k1os/camera.env
-FPS=${TWITCH_FPS:-${CAMERA_FPS:-8}}
-BITRATE=${TWITCH_BITRATE:-2500}
-INGEST=${TWITCH_INGEST:-rtmp://live.twitch.tv/app}
-SIZE=${TWITCH_RESOLUTION:-${CAMERA_RESOLUTION:-1280x720}}
-STATUS=/run/k1os/twitch-status.json
-mkdir -p /run/k1os
-OPTS="--fps $FPS --bitrate $BITRATE --status-file $STATUS"
-case "${TWITCH_OVERLAY:-1}" in
-    0) OPTS="$OPTS --no-overlay" ;;
-    2) OPTS="$OPTS --graph ${TWITCH_GRAPH_CORNER:-tr}" ;;
-esac
+#!/usr/bin/env python3
+"""Live stream to Twitch (k1os-twitch.service): asks k1os-camera to publish
+its H.264 picture, the one Mainsail's WebRTC camera shows, to Twitch's ingest
+server over RTMP, and stays for as long as it does. A stop (SIGTERM) ends the
+stream; k1os-camera then tells Twitch so, and the channel goes offline at once.
 
-READER_PID=/run/k1os/twitch-reader.pid
-rm -f "$READER_PID"
-INPUT="-use_wallclock_as_timestamps 1 -f h264 -framerate $FPS -i -"
-from_go2rtc=
-if systemctl -q is-active go2rtc.service; then
-    from_go2rtc=1
-    # go2rtc runs the one encoder (/usr/libexec/k1os/h264-source, with the
-    # settings from twitch.env) for this stream and Mainsail's WebRTC player
-    # alike; read it as fragmented MP4. A stop ends wget, never the encoder,
-    # which may still have other viewers. The encoder reports its rate to
-    # /run/k1os/stream-status.json; this file only says when Twitch started.
-    echo "{\"started\": $(date +%s)}" > "$STATUS"
-    INPUT="-thread_queue_size 64 -f mov -i -"
-    run_stream() {
-        /usr/bin/wget -q -O - "http://127.0.0.1:1984/go2rtc/api/stream.mp4?src=k1" &
-        echo $! > "$READER_PID"
-        wait $!
-    }
-elif [ -e "/dev/shm/k1os::jpeg" ]; then
-    # uStreamer runs: take its frames, the camera stays shared with Mainsail
-    if [ -n "$TWITCH_RESOLUTION" ] && [ "$TWITCH_RESOLUTION" != "${CAMERA_RESOLUTION:-1280x720}" ]; then
-        echo "k1os-twitch: uStreamer runs, the stream has the camera's ${CAMERA_RESOLUTION:-1280x720}, not TWITCH_RESOLUTION=$TWITCH_RESOLUTION" >&2
-    fi
-    run_stream() {
-        /usr/bin/ustreamer-dump --sink=k1os::jpeg --output - |
-            /usr/bin/k1os-stream --camera - $OPTS
-    }
-else
-    dev=$(/usr/libexec/k1os/camera-device) || exit 1
-    run_stream() {
-        /usr/bin/k1os-stream --camera "$dev" --size "$SIZE" $OPTS
-    }
-fi
+Settings in /usr/data/k1os/twitch.env (mode 600, the stream key lives only
+there):
+  TWITCH_KEY=live_...                      required
+  TWITCH_INGEST=rtmp://live.twitch.tv/app  optional, a closer ingest server
+  TWITCH_BITRATE=2500                      optional, kbit/s
+  TWITCH_FPS=                              optional, default: the camera's CAMERA_FPS
+  TWITCH_OVERLAY=1                         optional, 0 plain camera, 1 status bar,
+                                           2 status bar and the graph panel
+  TWITCH_GRAPH_CORNER=tr                   optional, corner of the panel: tl tr bl br
+The picture settings are read by k1os-camera (/usr/libexec/k1os/camera-options)
+when its encoder starts. Mainsail's TWITCH dialog (Moonraker component
+k1os_stream) writes the optional lines."""
+import json, os, signal, sys, time, urllib.request
 
-# The key goes to ffmpeg as the RTMP play path, not as part of the URL: that
-# way none of ffmpeg's messages (which name the output URL) contain it, and
-# the output below reaches the journal as it is written.
-run_stream | /usr/bin/ffmpeg -hide_banner -loglevel warning -nostdin \
-    $INPUT \
-    -f lavfi -i "anullsrc=r=44100:cl=mono" \
-    -map 0:v -map 1:a -c:v copy -c:a aac -b:a 32k -ar 44100 -ac 1 \
-    -shortest -flvflags no_duration_filesize \
-    -rtmp_app "${INGEST##*/}" -rtmp_playpath "$TWITCH_KEY" -f flv "${INGEST%/*}/" &
-pipe=$!
+ENV = "/usr/data/k1os/twitch.env"
+STATUS = "/run/k1os/twitch-status.json"
+CAMERA = "http://127.0.0.1:8080"
 
-# A stop (SIGTERM from systemd, KillMode=mixed: only this shell gets it) ends
-# the pipeline here, producers first: k1os-stream leaves on SIGTERM and closes
-# its output, ffmpeg sees the end of the video (-shortest), writes the FLV
-# trailer, closes the RTMP session and exits by itself, and Twitch takes the
-# channel offline at once. A signal to ffmpeg instead cuts that short ("Error
-# writing trailer: Immediate exit requested", or ffmpeg hangs after "Exiting
-# normally"), and Twitch shows a dropped connection for another minute or two;
-# ffmpeg gets one only when it has not left after 4 s. ustreamer-dump does not
-# always leave on SIGTERM while it waits for the sink. The unit must end as
-# inactive, not failed, or Moonraker waits on it.
-stopping=
-on_stop() {
-    trap "" TERM INT
-    stopping=1
-    # Reading from go2rtc, the encoder is not ours: end only the reader.
-    if [ -n "$from_go2rtc" ]; then
-        [ -s "$READER_PID" ] && kill -TERM $(cat "$READER_PID") 2>/dev/null
-    else
-        kill -TERM $(pidof k1os-stream ustreamer-dump) 2>/dev/null
-    fi
-    n=0
-    while [ $n -lt 40 ] && kill -0 $pipe 2>/dev/null; do sleep 0.1; n=$((n + 1)); done
-    kill -0 $pipe 2>/dev/null && kill -TERM $pipe
-    [ -z "$from_go2rtc" ] && kill -KILL $(pidof ustreamer-dump) 2>/dev/null
-}
-trap on_stop TERM INT
-wait $pipe
-rc=$?
-rm -f "$STATUS" "$READER_PID"
-[ -n "$stopping" ] && exit 0
-# The video ended without a stop (go2rtc restarted, the encoder died): fail,
-# so that systemd starts the stream again (Restart=on-failure).
-[ "$rc" -eq 0 ] && rc=1
-exit $rc
+
+def read_env(path):
+    """KEY=value lines as a shell would read them, quotes removed."""
+    values = {}
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+            values[key.strip()] = value
+    return values
+
+
+def camera(path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(CAMERA + path, data=data, method="POST" if data is not None else "GET")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return response.read()
+
+
+def publishing():
+    return json.loads(camera("/status")).get("publish", "off")
+
+
+def main():
+    try:
+        env = read_env(ENV)
+    except OSError:
+        print("k1os-twitch: %s is missing. Create it on the printer with your stream key:\n"
+              "  umask 077; echo TWITCH_KEY=live_xxxxxxxx > %s" % (ENV, ENV), file=sys.stderr)
+        return 1
+    if not env.get("TWITCH_KEY"):
+        print("k1os-twitch: TWITCH_KEY is empty in %s" % ENV, file=sys.stderr)
+        return 1
+    ingest = env.get("TWITCH_INGEST") or "rtmp://live.twitch.tv/app"
+
+    stop = []
+    signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
+    signal.signal(signal.SIGINT, lambda *_: stop.append(1))
+    # The key goes in the request's body, to this machine only; nothing here
+    # or in k1os-camera prints it.
+    try:
+        camera("/publish", {"url": ingest, "key": env["TWITCH_KEY"]})
+    except Exception as e:
+        print("k1os-twitch: k1os-camera did not take the stream: %s" % type(e).__name__, file=sys.stderr)
+        return 1
+    os.makedirs(os.path.dirname(STATUS), exist_ok=True)
+    with open(STATUS, "w") as f:
+        json.dump({"started": int(time.time())}, f)
+    print("k1os-twitch: publishing to %s" % ingest, flush=True)
+
+    rc, last = 0, None
+    while not stop:
+        time.sleep(1)
+        try:
+            state = publishing()
+        except Exception:
+            state = "off"       # k1os-camera is gone or restarting
+        if state != last:
+            print("k1os-twitch: %s" % state, flush=True)
+            last = state
+        if state == "off" and not stop:
+            # Not our stop: fail, so that systemd starts the stream again
+            # (Restart=on-failure). While "waiting", k1os-camera reconnects
+            # by itself.
+            rc = 1
+            break
+    try:
+        camera("/unpublish", {})
+        for _ in range(20):
+            if publishing() == "off":
+                break
+            time.sleep(0.2)
+    except Exception:
+        pass
+    try:
+        os.unlink(STATUS)
+    except OSError:
+        pass
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

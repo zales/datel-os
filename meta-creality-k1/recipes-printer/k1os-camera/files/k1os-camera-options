@@ -1,0 +1,24 @@
+#!/bin/sh
+# Prints the options of k1os-camera (k1os-camera.service), one per line. It
+# asks every time it opens the camera or starts the encoder, so a change in
+# the files below applies to the next viewer without a restart.
+#
+#   /usr/data/k1os/camera.env   CAMERA_RESOLUTION=1280x720, CAMERA_FPS=8:
+#                               what the camera is asked for (MJPEG, snapshots)
+#   /usr/data/k1os/twitch.env   the H.264 picture for WebRTC and Twitch alike:
+#                               TWITCH_BITRATE, TWITCH_FPS, TWITCH_OVERLAY,
+#                               TWITCH_GRAPH_CORNER
+TWITCH_BITRATE=; TWITCH_FPS=; TWITCH_OVERLAY=; TWITCH_GRAPH_CORNER=
+[ -r /usr/data/k1os/twitch.env ] && . /usr/data/k1os/twitch.env
+TWITCH_KEY=
+CAMERA_RESOLUTION=; CAMERA_FPS=
+[ -r /usr/data/k1os/camera.env ] && . /usr/data/k1os/camera.env
+dev=$(/usr/libexec/k1os/camera-device) || exit 1
+mkdir -p /run/k1os
+printf '%s\n' --camera-device "$dev" --camera-size "${CAMERA_RESOLUTION:-1280x720}" --camera-fps "${CAMERA_FPS:-8}"
+# k1os-stream's options; it reports its rate to the status file
+printf '%s\n' --fps "${TWITCH_FPS:-${CAMERA_FPS:-8}}" --bitrate "${TWITCH_BITRATE:-2500}" --status-file /run/k1os/stream-status.json
+case "${TWITCH_OVERLAY:-1}" in
+    0) printf '%s\n' --no-overlay ;;
+    2) printf '%s\n' --graph "${TWITCH_GRAPH_CORNER:-tr}" ;;
+esac

@@ -10,7 +10,7 @@ The printer streams its camera to Twitch with a status bar in the picture (file,
 ssh root@<ip> 'umask 077; echo TWITCH_KEY=live_xxxxxxxx > /usr/data/k1os/twitch.env'
 ```
 
-The key is read only by the stream wrapper, is passed to ffmpeg outside the URL, and never appears in logs, G-code or the Mainsail dialog.
+The key is read only by the stream wrapper, which hands it to `k1os-camera` on the printer itself, and never appears in logs, G-code or the Mainsail dialog.
 
 2. **Automatic title (optional).** Register an application at https://dev.twitch.tv/console/apps (any name, client type Public, any redirect URL such as `http://localhost`). The Client ID is not a secret; add it to `twitch.env`:
 
@@ -35,7 +35,7 @@ Then run `TWITCH_LOGIN` in Mainsail (console or the dialog's Login button). The 
 
 The service `k1os-twitch` also appears in Mainsail's host menu and can be started with `systemctl start k1os-twitch`. While the stream runs, the console shows `Twitch: live`, and the display line reads `Twitch: live 2.4 Mbit/s 00:12:31` (`TWITCH_M117=0` turns that off).
 
-Note on `480p`: with uStreamer running, which is the normal case, the stream has the camera's resolution because the frames come from uStreamer's memory sink and the Helix has no scaler. The 480p button then lowers the bitrate to 1 Mbit/s.
+Note on `480p`: the stream has the camera's resolution (`CAMERA_RESOLUTION` in `camera.env`), because the Helix has no scaler. The 480p button lowers the bitrate to 1 Mbit/s.
 
 ## The picture
 
@@ -88,4 +88,4 @@ The dialog shows the address, `twitch.tv/<channel>`; open it in a browser. Mains
 
 ## How it works
 
-The encoder is shared with Mainsail's **K1 (WebRTC)** camera: go2rtc runs `ustreamer-dump --sink=k1os::jpeg | k1os-stream` (`/usr/libexec/k1os/h264-source`) while anyone watches, and `k1os-twitch.service` reads it as fragmented MP4 (`wget …/go2rtc/api/stream.mp4?src=k1 | ffmpeg … -f flv rtmp://…`); stopping the stream ends only the reader. Without go2rtc running, `k1os-twitch.service` runs the pipeline below itself: `ustreamer-dump --sink=k1os::jpeg | k1os-stream | ffmpeg … -f flv rtmp://…`. uStreamer, which serves Mainsail, publishes every frame into a shared-memory sink; `k1os-stream` decodes the JPEG on the Helix, draws the overlay into the NV12 picture, encodes H.264 on the Helix with a userspace rate controller (QP moved one step per frame toward the target bitrate, keyframe every 2 s) and writes a raw stream; ffmpeg stamps it with the wall clock, adds a silent AAC track and muxes to RTMP. The Moonraker component `k1os_stream` draws the dialog, writes `twitch.env`, controls the service and maintains the title through the Twitch Helix API with the `channel:manage:broadcast` scope. Source: `meta-creality-k1/recipes-printer/k1os-stream/`.
+The encoder is shared with Mainsail's **K1 (WebRTC)** camera and lives in `k1os-camera`: it reads the camera, decodes the JPEG on the Helix, draws the overlay into the NV12 picture and encodes H.264 on the Helix with a userspace rate controller (QP moved one step at a time toward the target bitrate, keyframe every 2 s). `k1os-twitch.service` only asks it to publish (`POST /publish` on 127.0.0.1:8080, accepted from the printer itself alone) and to stop; the daemon speaks RTMP itself, stamps the pictures with its clock, adds a silent AAC track, reconnects after a lost connection and tells Twitch when the stream ends. A slow uplink does not hold up the local viewers: the pictures for Twitch wait in a queue of their own, which is emptied up to the next keyframe when it overflows. The Moonraker component `k1os_stream` draws the dialog, writes `twitch.env`, controls the service and maintains the title through the Twitch Helix API with the `channel:manage:broadcast` scope. Sources: `meta-creality-k1/recipes-printer/k1os-camera/` and `k1os-stream/`.

@@ -1,15 +1,14 @@
 #!/bin/sh
-# ffmpeg stand-in for moonraker-timelapse (its ffmpeg_binary_path points here).
-# The component renders with
+# ffmpeg stand-in for moonraker-timelapse (its ffmpeg_binary_path points here);
+# there is no ffmpeg on the printer. The component renders with
 #   ffmpeg -r FPS -i 'DIR/frame%6d.jpg' [-vf '...'] -threads 2 -g 5 -crf N
 #          -vcodec libx264 -pix_fmt yuv420p -an [extra] 'OUT.mp4' -y
-# and calls ffmpeg a second time, without -vcodec libx264, to rotate the preview
-# image. Here the frames go through k1os-helix-enc (JPEG decode with libjpeg,
-# H.264 encode on the X2000 Helix codec) and ffmpeg only wraps the H.264
-# stream into the MP4; no H.264 is encoded on the CPU. If the codec fails, the
-# MJPEG frames are copied into the MP4 unchanged, which keeps the recording but
-# plays in fewer players. The hardware path cannot rotate or flip; such filters
-# are reported and ignored. Any other call is passed to ffmpeg as it is.
+# Here the frames go through k1os-helix-enc (JPEG decode with libjpeg, H.264
+# encode on the X2000 Helix codec) and h264-to-mp4 wraps the stream into the
+# MP4 file; no H.264 is encoded on the CPU. The hardware path cannot rotate or
+# flip; such filters are reported and ignored. For the same filters the
+# component calls a second time, without -vcodec libx264, to turn the preview
+# image: that call is answered with success and the image stays as it is.
 #
 # Quality: the CRF from the Timelapse settings in Mainsail becomes the fixed
 # quantiser of the encoder (QP = CRF + 5, so the default CRF 23 gives QP 28,
@@ -18,14 +17,14 @@
 # HELIX_JPEG=1 to decode the JPEGs on the Helix too (10 ms a frame instead of
 # 49 ms in software; off by default because its first job once stopped the SoC)
 # and HELIX_PROGRESS=1 for a progress bar along the bottom of the video (frame
-# N of all frames, so the print's progress); for tests also FFMPEG, ENC and
+# N of all frames, so the print's progress); for tests also MP4, ENC and
 # HELIX_DEV (the codec's V4L2 node).
 
 # Moonraker starts this and hands down its protection from the OOM killer;
 # a render is the kind of thing that should go before the print does.
 echo 500 > /proc/$$/oom_score_adj 2>/dev/null
 [ -r /usr/data/k1os/timelapse.env ] && . /usr/data/k1os/timelapse.env
-FFMPEG=${FFMPEG:-/usr/bin/ffmpeg}
+MP4=${MP4:-/usr/bin/h264-to-mp4}
 ENC=${ENC:-/usr/bin/k1os-helix-enc}
 HELIX_DEV=${HELIX_DEV:-/dev/video1}
 decflag=
@@ -50,7 +49,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$vcodec" != "libx264" ] || [ -z "$input" ] || [ -z "$out" ]; then
-    exec "$FFMPEG" "$@"
+    echo "k1os-timelapse-render: only renders videos; left as it is: ${out:-$input}"
+    exit 0
 fi
 
 dir=$(dirname "$input")
@@ -63,14 +63,14 @@ progflag=
 [ -n "$progress" ] && progflag="-p $(ls "$dir"/frame*.jpg 2>/dev/null | wc -l)"
 
 # Progress lines (frame=N ...) go to stdout, where moonraker-timelapse reads them.
-# The raw H.264 carries no timestamps. "-r" (input option) stamps every frame at
-# a fixed rate; "-framerate" only seeds the h264 demuxer's guess, which goes
-# wrong after about 50 frames (the rest get 1 us apart and players skip them).
+# The raw H.264 carries no timestamps; h264-to-mp4 gives every picture the
+# same duration, 1/fps.
+fps=${fps%.*}
 if ls "$dir"/frame*.jpg 2>/dev/null | sort | "$ENC" -d "$HELIX_DEV" $decflag $progflag -q "$qp" -g "${HELIX_GOP:-30}" -o "$h264" - 2>&1 &&
-   "$FFMPEG" -nostdin -loglevel error -y -r "$fps" -i "$h264" -c:v copy -movflags +faststart "$out"; then
+   "$MP4" "${fps:-30}" "$h264" "$out"; then
     rm -f "$h264"
     exit 0
 fi
-rm -f "$h264"
-echo "k1os-timelapse-render: Helix encoding failed, storing the MJPEG frames unchanged"
-exec "$FFMPEG" -nostdin -loglevel error -y -framerate "$fps" -i "$input" -c:v copy -an "$out"
+rm -f "$h264" "$out"
+echo "k1os-timelapse-render: rendering failed; the frames are still in $dir"
+exit 1

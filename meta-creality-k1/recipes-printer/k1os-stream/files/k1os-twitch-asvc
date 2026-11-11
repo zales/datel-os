@@ -13,6 +13,6 @@ fi
 # Moonraker's default file has no newline at its end.
 [ -s "$f" ] && [ -n "$(tail -c 1 "$f")" ] && echo >> "$f"
 grep -qx 'k1os-twitch' "$f" || echo k1os-twitch >> "$f"
-# go2rtc runs the shared encoder; k1os_stream restarts it for new picture settings.
-grep -qx 'go2rtc' "$f" || echo go2rtc >> "$f"
+# k1os-camera runs the encoder; k1os_stream restarts it for new picture settings.
+grep -qx 'k1os-camera' "$f" || echo k1os-camera >> "$f"
 exit 0

@@ -14,7 +14,7 @@ Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, K
 | System | Yocto scarthgap, systemd, read-only squashfs root, data in `/usr/data/k1os`, A/B slots with a trial boot that falls back to the other slot |
 | Printing | Kalico with open firmware on all three MCUs, load cell probe, verified prints |
 | Web UI | Moonraker and Mainsail behind nginx, printer name and camera registered on first boot |
-| Camera | 720p MJPEG through uStreamer, H.264 over WebRTC through go2rtc from the Helix codec (shared with the Twitch stream), a snapshot camera for slow links |
+| Camera | 720p MJPEG, snapshots and H.264 over WebRTC from the Helix codec (shared with the Twitch stream), all from one daemon of 1 MB, `k1os-camera` |
 | Timelapse | moonraker-timelapse with the render on the X2000 Helix hardware encoder |
 | Twitch | Live stream with a status bar, temperature graph and printer statistics in the picture, controlled from Mainsail, automatic stream title |
 | Updates | Write the inactive slot over SSH, trial boot, GitHub Releases from tags |
@@ -97,9 +97,8 @@ Our code, recipes, scripts, documentation and artwork are under the MIT license 
 | Linux 6.6 (Ingenic X2000, NebulaOS) | GPL-2.0 | [NebulaOS-KE/NebulaOS-kernel](https://github.com/NebulaOS-KE/NebulaOS-kernel) |
 | Kalico host and MCU firmware | GPL-3.0 | [pellcorp/kalico](https://github.com/pellcorp/kalico), [zales/k1-kalico-firmware](https://github.com/zales/k1-kalico-firmware) (a fork of pellcorp/k1-kalico-firmware) |
 | Moonraker, Mainsail, moonraker-timelapse | GPL-3.0 | upstream |
-| uStreamer | GPL-3.0 | [pikvm/ustreamer](https://github.com/pikvm/ustreamer) |
-| go2rtc 1.9.15 (built from source, one patch: a byte limit on the queue for a slow viewer) | MIT | [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc) |
-| ffmpeg 6.1 (muxing only, no x264) | LGPL-2.1 / GPL-2.0 | poky |
+| Mbed TLS 3.6.2 (the DTLS handshake of WebRTC, inside `k1os-camera`) | Apache-2.0 | [Mbed-TLS/mbedtls](https://github.com/Mbed-TLS/mbedtls) |
+| Zig 0.17.1 (build tool only) | MIT | [ziglang.org](https://ziglang.org/) |
 | Spleen bitmap font | BSD-2-Clause | [fcambus/spleen](https://github.com/fcambus/spleen) |
 | GuppyScreen | GPL-3.0, MIT, BSD-3 | upstream |
 | Wi-Fi firmware `brcmfmac43430-sdio.bin` | linux-firmware license (binary) | linux-firmware |

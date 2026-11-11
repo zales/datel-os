@@ -59,7 +59,7 @@ SETTING_KEYS = {
     "m117": "TWITCH_M117", "autostart": "TWITCH_AUTOSTART",
 }
 PIPELINE_KEYS = ("resolution", "bitrate_kbps", "overlay", "ingest")
-# Settings of the picture itself, which go2rtc's shared encoder reads at start.
+# Settings of the picture itself, which k1os-camera's encoder reads at start.
 ENCODER_KEYS = ("resolution", "bitrate_kbps", "overlay")
 # TWITCH_OVERLAY: 0 plain camera, 1 status bar, 2 status bar and graph panel
 OVERLAY_NAMES = {0: "off", 1: "text", 2: "text+graph"}
@@ -180,9 +180,9 @@ class K1osStream:
         self.auth_file: str = config.get("auth_file", "/usr/data/k1os/twitch-auth.json")
         self.status_file: str = config.get("status_file", "/run/k1os/twitch-status.json")
         self.service: str = config.get("service", "k1os-twitch")
-        # go2rtc runs the one encoder for Twitch and Mainsail's WebRTC camera;
+        # k1os-camera runs the one encoder for Twitch and Mainsail's WebRTC camera;
         # it reports its rate here, and takes new picture settings on a restart.
-        self.encoder_service: str = config.get("encoder_service", "go2rtc")
+        self.encoder_service: str = config.get("encoder_service", "k1os-camera")
         self.encoder_status_file: str = config.get(
             "encoder_status_file", "/run/k1os/stream-status.json")
         self.title_interval: float = config.getfloat("title_interval", 60.0)
@@ -531,7 +531,7 @@ class K1osStream:
     def read_stats(self) -> Dict[str, Any]:
         stats = self._read_json(self.status_file)
         if stats and "kbit" not in stats:
-            # Twitch reads go2rtc's shared encoder: the rate comes from the
+            # Twitch is sent by k1os-camera's encoder: the rate comes from the
             # encoder, the start time stays Twitch's own.
             enc = self._read_json(self.encoder_status_file)
             enc.pop("started", None)

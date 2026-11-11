@@ -1,6 +1,7 @@
 [Unit]
 Description=Twitch live stream of the camera with a status overlay
-After=network-online.target ustreamer.service moonraker.service
+After=network-online.target k1os-camera.service moonraker.service
+Requires=k1os-camera.service
 Wants=network-online.target
 
 [Service]
@@ -8,10 +9,8 @@ Type=simple
 ExecStart=/usr/libexec/k1os/twitch
 Restart=on-failure
 RestartSec=15
-# The wrapper tears the pipeline down itself on SIGTERM: producers first, then
-# up to 4 s for ffmpeg to close the RTMP session by itself, and exits 0. Only
-# the wrapper gets the SIGTERM (mixed): one sent to ffmpeg too makes it drop
-# the session instead of closing it. The timeout is only a backstop.
+# On SIGTERM the wrapper asks k1os-camera to end the stream, waits until it
+# has closed the RTMP session, and exits 0. The timeout is only a backstop.
 KillMode=mixed
 TimeoutStopSec=10
 SuccessExitStatus=143

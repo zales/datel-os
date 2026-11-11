@@ -2,8 +2,8 @@ SUMMARY = "Timelapse encoding on the X2000 Helix video codec"
 DESCRIPTION = "k1os-helix-enc decodes JPEG snapshots (libjpeg-turbo, or the Helix \
 JPEG decoder with -H) and encodes them to H.264 on the Ingenic Helix block (V4L2 \
 M2M node helix-venc), writing an Annex B stream; timelapse-render is the ffmpeg \
-stand-in moonraker-timelapse calls, which runs the codec and lets ffmpeg only wrap \
-the stream into MP4. No H.264 is encoded on the CPU. Needs the kernel's \
+stand-in moonraker-timelapse calls, which runs the codec and lets h264-to-mp4 \
+(recipe k1os-camera) wrap the stream into MP4. No H.264 is encoded on the CPU. Needs the kernel's \
 CONFIG_INGENIC_HELIX with the fixed-QP rate control (INGENIC_HELIX_H264E_RC_NONE, \
 patches 0001 and 0003 of linux-x2000) and the shared DMA pool of the K1 device tree."
 LICENSE = "MIT"
@@ -27,4 +27,5 @@ do_install() {
 }
 
 FILES:${PN} += "${libexecdir}/k1os"
-RDEPENDS:${PN} += "ffmpeg"
+# h264-to-mp4
+RDEPENDS:${PN} += "k1os-camera"
