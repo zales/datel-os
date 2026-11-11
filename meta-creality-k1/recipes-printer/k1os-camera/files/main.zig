@@ -58,7 +58,20 @@ const camera = @import("camera.zig");
 /// the printer runs code of people who are not allowed to see its camera.
 pub const std_options: std.Options = .{ .side_channels_mitigations = .none };
 
+/// Slots, including viewers that are still connecting or have gone silent.
 const max_viewers = 4;
+/// How many viewers get the video at once. Each one costs the CPU its own
+/// encryption and the Wi-Fi its own 2.5 Mbit/s; a third is turned away.
+const max_watching = 2;
+/// A connected viewer that has not been heard from for this long (a closed
+/// or reloaded tab) no longer counts and may be replaced.
+const stale_ms = 7_000;
+/// Lost packets are sent again, but only up to this share of what is sent
+/// anyway: one for every `resend_share` packets, saved up to `resend_burst`.
+/// A viewer on a link that loses more does not get to double the traffic
+/// for everybody; it asks for a key picture instead.
+const resend_share = 4;
+const resend_burst = 96;
 const max_raw = 2;
 const connect_timeout_ms = 30_000;
 /// Chrome checks consent every five seconds or so (RFC 7675).
@@ -305,6 +318,8 @@ const Viewer = struct {
     last_check_ms: i64 = 0,
     /// has been sent a key picture, so the following ones make sense to it
     live: bool = false,
+    /// how many lost packets it may still be sent again
+    resend_credit: u16 = 0,
 
     fn drop(v: *Viewer, why: [*:0]const u8) void {
         if (!v.active) return;
@@ -344,6 +359,7 @@ const Viewer = struct {
         // client key, server key, client salt, server salt; we are the client
         v.rtp_out = .init(keys[0..16].*, keys[32..46].*, .rtp);
         v.rtcp_in = .init(keys[16..32].*, keys[46..60].*, .rtcp);
+        if (watchingViewers(nowMs()) >= max_watching) return v.drop("too many viewers");
         v.phase = .connected;
         requestKeyPicture();
         _ = dprintf(2, "k1os-camera: viewer %08x connected after %d ms\n", @as(c_uint, @truncate(v.id)), @as(c_int, @intCast(nowMs() - v.born_ms)));
@@ -356,6 +372,11 @@ const Viewer = struct {
         var lost: [64]u16 = undefined;
         for (rtp.nackedPackets(report, &lost)) |seq| {
             const again = resendOf(v).find(seq) orelse continue;
+            if (v.resend_credit == 0) {
+                _ = resends_refused.fetchAdd(1, .seq_cst);
+                continue;
+            }
+            v.resend_credit -= 1;
             if (v.send(again)) _ = packets_resent.fetchAdd(1, .seq_cst);
         }
     }
@@ -408,6 +429,7 @@ const Viewer = struct {
             const packet = buf[0..v.rtp_out.protectRtp(&buf, len, v.roc)];
             _ = v.send(packet);
             resendOf(v).store(packet);
+            if (v.seq % resend_share == 0 and v.resend_credit < resend_burst) v.resend_credit += 1;
             v.seq +%= 1;
             if (v.seq == 0) v.roc += 1;
         }
@@ -420,6 +442,7 @@ var viewers: [max_viewers]Viewer = @splat(.{});
 /// resend[i] belongs to viewers[i]
 var resend: [max_viewers]rtp.Resend = @splat(.{});
 var packets_resent = std.atomic.Value(u32).init(0);
+var resends_refused = std.atomic.Value(u32).init(0);
 var pictures_sent = std.atomic.Value(u32).init(0);
 /// of the certificate every viewer is shown
 var our_fingerprint: [fingerprint_len + 1]u8 = undefined;
@@ -475,7 +498,22 @@ fn rawReaders() u32 {
 }
 
 /// A free slot; failing that, the oldest viewer that never connected.
+/// Connected viewers that are being heard from.
+fn watchingViewers(now: i64) usize {
+    var n: usize = 0;
+    for (viewers) |v| {
+        if (v.active and v.phase == .connected and now - v.last_check_ms <= stale_ms) n += 1;
+    }
+    return n;
+}
+
 fn freeViewer() ?*Viewer {
+    const now = nowMs();
+    if (watchingViewers(now) >= max_watching) return null;
+    // room for a new one: a silent viewer goes first
+    for (&viewers) |*v| {
+        if (v.active and v.phase == .connected and now - v.last_check_ms > stale_ms) v.drop("silent, replaced");
+    }
     var oldest: ?*Viewer = null;
     for (&viewers) |*v| {
         if (!v.active) return v;
@@ -796,11 +834,11 @@ fn handle(fd: c_int, peer: SockaddrIn) bool {
         lock.unlock();
         const published = publish.status();
         const cam: camera.Status = if (helix_mode) camera.status() else .{ .open = false, .frames = 0, .streams = 0 };
-        const text = std.fmt.bufPrint(&out, "{{\"viewers\":{d},\"connecting\":{d},\"readers\":{d},\"pictures\":{d},\"resent\":{d}," ++
+        const text = std.fmt.bufPrint(&out, "{{\"viewers\":{d},\"connecting\":{d},\"readers\":{d},\"pictures\":{d},\"resent\":{d},\"resends_refused\":{d}," ++
             "\"publish\":\"{s}\",\"published\":{d},\"publish_overflows\":{d}," ++
             "\"camera\":{},\"camera_frames\":{d},\"mjpeg\":{d}}}\n", .{
             connected,                     slots - connected, rawReaders(),        pictures_sent.load(.seq_cst),
-            packets_resent.load(.seq_cst), @tagName(published.state), published.pictures, published.overflows,
+            packets_resent.load(.seq_cst), resends_refused.load(.seq_cst), @tagName(published.state), published.pictures, published.overflows,
             cam.open,                      cam.frames,        cam.streams,
         }) catch unreachable;
         reply(fd, "200 OK", "application/json", text);
@@ -1193,4 +1231,15 @@ test "headerValue and clientIp" {
     var buf: [16]u8 = undefined;
     try std.testing.expectEqualStrings("192.168.1.114", clientIp(.{ .addr = .{ 127, 0, 0, 1 } }, headers, &buf));
     try std.testing.expectEqualStrings("10.0.0.9", clientIp(.{ .addr = .{ 10, 0, 0, 9 } }, headers, &buf));
+}
+
+test "watchingViewers counts the connected viewers that are still heard from" {
+    viewers = @splat(.{});
+    defer viewers = @splat(.{});
+    viewers[0] = .{ .active = true, .phase = .connected, .last_check_ms = 10_000 };
+    viewers[1] = .{ .active = true, .phase = .connected, .last_check_ms = 10_000 - stale_ms - 1 };
+    viewers[2] = .{ .active = true, .phase = .handshaking, .last_check_ms = 10_000 };
+    try std.testing.expectEqual(1, watchingViewers(10_000));
+    viewers[3] = .{ .active = true, .phase = .connected, .last_check_ms = 10_000 - stale_ms };
+    try std.testing.expectEqual(2, watchingViewers(10_000));
 }

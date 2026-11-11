@@ -29,7 +29,7 @@ Mainsail shows every camera at once until one is picked, and the pick is stored 
 
 ### Viewer limits
 
-`k1os-camera` has four places for WebRTC viewers, and nginx lets in two MJPEG streams at a time (`limit_conn` in `/etc/nginx/sites-enabled/mainsail`): an MJPEG stream is about 6 Mbit/s on the 2.4 GHz link, a WebRTC viewer 2.5 Mbit/s. One MJPEG viewer more gets a 503 and Mainsail's player tries again until a place is free. Snapshots are not counted, so the timelapse and the **K1 (snapshots)** camera always work. The limits guard the printer's resources; they are not an access control.
+`k1os-camera` sends the video to two WebRTC viewers at a time, and nginx lets in two MJPEG streams at a time (`limit_conn` in `/etc/nginx/sites-enabled/mainsail`): an MJPEG stream is about 6 Mbit/s on the 2.4 GHz link, a WebRTC viewer 2.5 Mbit/s and its own encryption on the CPU. One viewer more gets a 503 and Mainsail's player tries again until a place is free; a WebRTC viewer that has been silent for seven seconds (a closed or reloaded tab) gives its place up at once. Packets a viewer lost are sent again only up to a quarter of the stream's own rate (`resends_refused` in `/status` counts the rest), so one viewer on a bad link cannot fill the Wi-Fi. Snapshots are not counted, so the timelapse and the **K1 (snapshots)** camera always work. The limits guard the printer's resources; they are not an access control.
 
 ### OrcaSlicer
 
