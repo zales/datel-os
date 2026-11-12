@@ -42,7 +42,7 @@ Timelapse uses [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-
 | Part | What it does |
 |---|---|
 | Moonraker component `[timelapse]` | Takes a snapshot per layer or per interval, offers the Timelapse panel in Mainsail. Frames go to `/usr/data/k1os/timelapse/frames/`, videos to `/usr/data/k1os/timelapse/` |
-| `k1os-helix-enc` | Decodes the JPEG frames (libjpeg-turbo, or the Helix with `-H`) and encodes them through `/dev/video1` into an H.264 stream |
+| `k1os-helix-enc` | Decodes the JPEG frames on the Helix (libjpeg-turbo with `-S`, and when the Helix refuses a frame) and encodes them through `/dev/video1` into an H.264 stream |
 | `timelapse-render` | Stands in for ffmpeg in the component's configuration (there is no ffmpeg on the printer): runs the codec and lets `h264-to-mp4` write the MP4 file around the stream. Rotating or flipping is not possible on this path |
 
 ### Use
@@ -61,7 +61,7 @@ The panel's CRF setting becomes the encoder's fixed quantiser (QP = CRF + 5, def
 |---|---|
 | `HELIX_QP=28` | Quantiser when the panel's CRF is not used |
 | `HELIX_GOP=30` | Keyframe interval in frames |
-| `HELIX_JPEG=1` | Decode the JPEG frames on the Helix too (10 ms a frame instead of 49 ms). Off by default, see [NOTES.md](NOTES.md) |
+| `HELIX_JPEG=0` | Decode the JPEG frames in software (67 ms a frame instead of 11 ms on the Helix, a whole CPU while the render runs) |
 | `HELIX_PROGRESS=1` | Draw a progress bar along the bottom of the video |
 
 ### Checking a render by hand

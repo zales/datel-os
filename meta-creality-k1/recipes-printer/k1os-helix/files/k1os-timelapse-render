@@ -3,8 +3,8 @@
 # there is no ffmpeg on the printer. The component renders with
 #   ffmpeg -r FPS -i 'DIR/frame%6d.jpg' [-vf '...'] -threads 2 -g 5 -crf N
 #          -vcodec libx264 -pix_fmt yuv420p -an [extra] 'OUT.mp4' -y
-# Here the frames go through k1os-helix-enc (JPEG decode with libjpeg, H.264
-# encode on the X2000 Helix codec) and h264-to-mp4 wraps the stream into the
+# Here the frames go through k1os-helix-enc (JPEG decode and H.264 encode on
+# the X2000 Helix codec) and h264-to-mp4 wraps the stream into the
 # MP4 file; no H.264 is encoded on the CPU. The hardware path cannot rotate or
 # flip; such filters are reported and ignored. For the same filters the
 # component calls a second time, without -vcodec libx264, to turn the preview
@@ -14,8 +14,8 @@
 # quantiser of the encoder (QP = CRF + 5, so the default CRF 23 gives QP 28,
 # about 2 to 4 Mbit/s at 720p30). /usr/data/k1os/timelapse.env may set
 # HELIX_QP (18..51) to override it, HELIX_GOP (keyframe interval, 30),
-# HELIX_JPEG=1 to decode the JPEGs on the Helix too (10 ms a frame instead of
-# 49 ms in software; off by default because its first job once stopped the SoC)
+# HELIX_JPEG=0 to decode the JPEGs in software (67 ms a frame instead of 11 ms
+# on the Helix)
 # and HELIX_PROGRESS=1 for a progress bar along the bottom of the video (frame
 # N of all frames, so the print's progress); for tests also MP4, ENC and
 # HELIX_DEV (the codec's V4L2 node).
@@ -28,7 +28,7 @@ MP4=${MP4:-/usr/bin/h264-to-mp4}
 ENC=${ENC:-/usr/bin/k1os-helix-enc}
 HELIX_DEV=${HELIX_DEV:-/dev/video1}
 decflag=
-[ "${HELIX_JPEG:-0}" = 1 ] && decflag=-H
+[ "${HELIX_JPEG:-1}" = 0 ] && decflag=-S
 progress=
 [ "${HELIX_PROGRESS:-0}" = 1 ] && progress=1
 

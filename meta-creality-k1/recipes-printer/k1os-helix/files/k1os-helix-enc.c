@@ -7,11 +7,12 @@
  * input JPEG (the camera's MJPEG snapshots) into NV12, pushes the frame
  * through the encoder and appends the Annex B access unit to the output file.
  *
- * The JPEG decode runs in software by default (libjpeg-turbo, about 35 ms a
- * 720p frame on the K1; the CPU is idle anyway while a timelapse renders).
- * -H uses the Helix JPEG decoder instead: on the first attempt (8 November
- * 2026) its first job stopped the whole SoC until a power cycle, so it is
- * kept as an experiment behind a flag.
+ * The JPEG decode runs on the Helix too (about 11 ms a 720p frame). When the
+ * decoder cannot be set up or refuses a frame, the rest of the run decodes in
+ * software (libjpeg-turbo, 67 ms a frame at 816 MHz); -S does so from the
+ * start. On 8 November 2026 the very first job sent to the Helix, a JPEG
+ * decode on a kernel without the frame setup patch, stopped the SoC; it has
+ * not happened since, and the camera daemon decodes every frame this way.
  *
  * Driver quirks this code works around (helix_ops.c, h264e_rc.c):
  *  - S_FMT on the capture queue with H264 resets every encoder parameter to
@@ -27,9 +28,9 @@
  *  - The encoder's bitstream buffer is at most width*height*3/4 bytes and
  *    the driver aborts if a frame grows past it, so very low QPs are refused.
  *
- * Usage: k1os-helix-enc [-d /dev/video1] [-q qp] [-g gop] [-a] [-H] [-D] -o out.h264 frame.jpg...
+ * Usage: k1os-helix-enc [-d /dev/video1] [-q qp] [-g gop] [-a] [-S] [-D] -o out.h264 frame.jpg...
  *        a single "-" as the file list reads the names from stdin;
- *        -H decodes the JPEGs on the Helix instead of in software;
+ *        -S decodes the JPEGs in software instead of on the Helix;
  *        -D decodes only and writes the raw NV12 frames (decoder check).
  *
  * SPDX-License-Identifier: MIT
@@ -70,7 +71,7 @@ struct ctx {
 
 static int verbose;
 static int decode_only;
-static int sw_decode = 1;
+static int sw_decode;
 static const char *device = "/dev/video1";
 
 static void msg(const char *fmt, ...)
@@ -599,14 +600,14 @@ static uint8_t *read_file(const char *path, size_t *len)
 static void usage(void)
 {
 	fprintf(stderr,
-		"usage: k1os-helix-enc [-d device] [-q qp] [-g gop] [-p total] [-a] [-H] [-D] [-v] -o out.h264 frame.jpg...\n"
+		"usage: k1os-helix-enc [-d device] [-q qp] [-g gop] [-p total] [-a] [-S] [-D] [-v] -o out.h264 frame.jpg...\n"
 		"  -d  V4L2 M2M node of the Helix codec (default /dev/video1)\n"
 		"  -q  fixed quantiser 18..51, lower is better and larger (default 28)\n"
 		"  -g  frames between IDR pictures (default 30)\n"
 		"  -p  draw a progress bar at the bottom: this is frame N of `total` frames\n"
 		"  -a  append to the output instead of truncating it\n"
 		"  -D  decode only: write the NV12 frames instead of H.264\n"
-		"  -H  decode the JPEGs on the Helix instead of in software (experimental)\n"
+		"  -S  decode the JPEGs in software instead of on the Helix\n"
 		"  -v  verbose\n"
 		"  -   read the JPEG file names from stdin, one per line\n");
 }
@@ -625,7 +626,7 @@ int main(int argc, char **argv)
 	int argi;
 	uint8_t *nv12 = NULL, *ysrc, *uvsrc;
 
-	while ((opt = getopt(argc, argv, "d:o:q:g:p:aDHvh")) != -1) {
+	while ((opt = getopt(argc, argv, "d:o:q:g:p:aDHSvh")) != -1) {
 		switch (opt) {
 		case 'd': device = optarg; break;
 		case 'o': out_path = optarg; break;
@@ -634,7 +635,8 @@ int main(int argc, char **argv)
 		case 'p': progress_total = atoi(optarg); break;
 		case 'a': append = 1; break;
 		case 'D': decode_only = 1; break;
-		case 'H': sw_decode = 0; break;
+		case 'H': break;	/* older callers: the Helix is the default */
+		case 'S': sw_decode = 1; break;
 		case 'v': verbose = 1; break;
 		default: usage(); return 2;
 		}
@@ -702,15 +704,10 @@ int main(int argc, char **argv)
 		if (!w) {
 			w = jw;
 			h = jh;
-			if (sw_decode) {
-				nv12 = malloc((size_t)w * h * 3 / 2);
-				if (!nv12) {
-					free(jpg);
-					goto out;
-				}
-			} else if (setup_decoder(&dec, w, h) < 0) {
-				free(jpg);
-				goto out;
+			if (!sw_decode && setup_decoder(&dec, w, h) < 0) {
+				msg("no Helix JPEG decoder, decoding in software");
+				close_ctx(&dec);
+				sw_decode = 1;
 			}
 			if (!decode_only && setup_encoder(&enc, w, h, qp, gop) < 0) {
 				free(jpg);
@@ -727,14 +724,26 @@ int main(int argc, char **argv)
 		}
 
 		t = now_ms();
-		if (sw_decode) {
-			ysrc = nv12;
-			uvsrc = nv12 + (size_t)w * h;
-			rc = decode_sw(jpg, len, w, h, ysrc, uvsrc);
-		} else {
+		rc = -1;
+		if (!sw_decode) {
 			ysrc = dec.cap[0].map;
 			uvsrc = dec.cap[1].map;
 			rc = decode(&dec, jpg, len, w, h);
+			if (rc < 0) {
+				msg("%s: the Helix refused it, decoding in software from here", path);
+				sw_decode = 1;
+			}
+		}
+		if (rc < 0) {
+			if (!nv12)
+				nv12 = malloc((size_t)w * h * 3 / 2);
+			if (!nv12) {
+				free(jpg);
+				goto out;
+			}
+			ysrc = nv12;
+			uvsrc = nv12 + (size_t)w * h;
+			rc = decode_sw(jpg, len, w, h, ysrc, uvsrc);
 		}
 		if (rc < 0) {
 			msg("%s: decode failed", path);

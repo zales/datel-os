@@ -105,6 +105,12 @@ Stock Creality recorded its timelapse with the X2000's Helix block: its Klipper 
 - With less CPU, Klipper's stalls became the next failure: `Timer too close` after stalls of 0.6 to 2.1 s. Kalico sends steps only 0.45 s ahead; the 2 s it reports as its buffer is planned moves, not steps. Patched to 3 s, see [KALICO.md](KALICO.md#known-behaviour).
 - Load that was found on the way and removed: Moonraker's `systemctl show` every two seconds (14 to 17 % of a CPU in systemd), `k1os-bootlog` writing the whole journal every minute (3.4 MB after six hours), a camera viewer on a weak link asking for 93 000 packets again.
 
+## 12 November 2026: timelapse decodes JPEG on the Helix
+
+- The render decoded its JPEG frames in software since the freeze of 8 November and kept one CPU at 100 % for as long as it ran. Measured at 816 MHz on 150 frames of 1280×720: software 64 to 67 ms a frame and 12 s for the render, the Helix 11 ms and 4.1 s.
+- Twenty renders of the same frames gave the same H.264 file each time, no failed frame. The decoded pictures differ from libjpeg-turbo's by 0.5 on average and 3 at most (of 255).
+- The Helix decoder is now the default. When it cannot be set up or refuses a frame, the run goes on in software; `HELIX_JPEG=0` asks for software from the start. A JPEG cut off after 20 kB is not refused: the Helix returns a picture for it without an error.
+
 ## Phases
 
 0. **Rescue:** eMMC backup and USB mask-ROM boot. Backup done; USB boot described, not verified on S12.
