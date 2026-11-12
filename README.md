@@ -4,7 +4,7 @@
 
 Open firmware for the Creality K1, built from source with Yocto: Linux 6.6-rt, Kalico with open firmware for all three MCUs, Moonraker, Mainsail, camera streaming, hardware-encoded timelapse and Twitch live streaming. The stock bootloader stays in place and the second eMMC slot always holds a way back.
 
-**Pre-release for developers.** It runs on the author's K1 in both A/B slots. The display does not work yet, recovery from a kernel that fails to boot needs a USB cable, and everything is verified on one printer. Version 0.5.0 lowers the CPU clock to 816 MHz to stop wrong floating point results; a full print with that kernel is still to be done. Read [Limitations](#limitations) before installing.
+**Pre-release for developers.** It runs on the author's K1 in both A/B slots. The display does not work yet, recovery from a kernel that fails to boot needs a USB cable, and everything is verified on one printer. Since version 0.5.0 the CPU runs at 816 MHz to stop wrong floating point results; the first prints with that kernel, 97 and 31 minutes, ran without a step error. Read [Limitations](#limitations) before installing.
 
 ## What works
 
